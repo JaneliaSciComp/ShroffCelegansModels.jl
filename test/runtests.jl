@@ -1,6 +1,6 @@
-using ShroffCelegansModel
+using ShroffCelegansModels
 using Test
 
-@testset "ShroffCelegansModel.jl" begin
+@testset "ShroffCelegansModels.jl" begin
     # Write your tests here.
 end

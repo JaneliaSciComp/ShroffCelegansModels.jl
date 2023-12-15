@@ -1,16 +1,16 @@
-using ShroffCelegansModel
+using ShroffCelegansModels
 using Documenter
 
-DocMeta.setdocmeta!(ShroffCelegansModel, :DocTestSetup, :(using ShroffCelegansModel); recursive=true)
+DocMeta.setdocmeta!(ShroffCelegansModels, :DocTestSetup, :(using ShroffCelegansModels); recursive=true)
 
 makedocs(;
-    modules=[ShroffCelegansModel],
+    modules=[ShroffCelegansModels],
     authors="Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors",
-    repo="https://github.com/Mark Kittisopikul/ShroffCelegansModel.jl/blob/{commit}{path}#{line}",
-    sitename="ShroffCelegansModel.jl",
+    repo="https://github.com/Mark Kittisopikul/ShroffCelegansModels.jl/blob/{commit}{path}#{line}",
+    sitename="ShroffCelegansModels.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://Mark Kittisopikul.github.io/ShroffCelegansModel.jl",
+        canonical="https://Mark Kittisopikul.github.io/ShroffCelegansModels.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -20,6 +20,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/Mark Kittisopikul/ShroffCelegansModel.jl",
+    repo="github.com/Mark Kittisopikul/ShroffCelegansModels.jl",
     devbranch="main",
 )

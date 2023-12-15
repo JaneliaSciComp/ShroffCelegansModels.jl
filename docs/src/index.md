@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = ShroffCelegansModel
+CurrentModule = ShroffCelegansModels
 ```
 
-# ShroffCelegansModel
+# ShroffCelegansModels
 
-Documentation for [ShroffCelegansModel](https://github.com/Mark Kittisopikul/ShroffCelegansModel.jl).
+Documentation for [ShroffCelegansModels](https://github.com/Mark Kittisopikul/ShroffCelegansModels.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [ShroffCelegansModel]
+Modules = [ShroffCelegansModels]
 ```

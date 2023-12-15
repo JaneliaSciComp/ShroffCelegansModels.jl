@@ -58,6 +58,6 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using ShroffCelegansModel
-            DocMeta.setdocmeta!(ShroffCelegansModel, :DocTestSetup, :(using ShroffCelegansModel); recursive=true)
-            doctest(ShroffCelegansModel)'
+            using ShroffCelegansModels
+            DocMeta.setdocmeta!(ShroffCelegansModels, :DocTestSetup, :(using ShroffCelegansModels); recursive=true)
+            doctest(ShroffCelegansModels)'
