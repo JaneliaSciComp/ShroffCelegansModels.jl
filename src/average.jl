@@ -11,6 +11,11 @@ function average(models::Vector{<: AbstractCelegansModel}, weights::AbstractWeig
     end
     
     common_names = intersect(_names..., psuedo_seam_cells)
+    for psc in psuedo_seam_cells
+        if psc ∉ common_names
+            @warn "$psc is missing from average"
+        end
+    end
     unique_names = unique(vcat(_names...))
     distinct_names = setdiff(unique_names, common_names)
     #filter!(!startswith("a"), distinct_names)
@@ -20,7 +25,12 @@ function average(models::Vector{<: AbstractCelegansModel}, weights::AbstractWeig
     # common_names = intersect(_names...)
 
     original_knot_pairs = map(models) do model
-        twisted_model = parent(model)
+        twisted_model = if model isa Types.StraightenedCelegansModel
+            parent(model)
+        else
+            model
+        end
+        #twisted_model = parent(model)
         original_knots = knots(central_spline(twisted_model))[4:end-3]
         n = unique(twisted_model.names[1:2:end])
         common_pairs = Iterators.filter(t->(t[2] ∈ common_names),zip(original_knots,n))

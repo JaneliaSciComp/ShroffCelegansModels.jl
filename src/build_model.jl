@@ -24,7 +24,7 @@ function build_celegans_model(
 	return build_celegans_model(df_lattice; names)
 end
 
-function build_celegans_model(df_lattice::DataFrame; cross_sections::Vector{Union{Nothing, DataFrame}} = Union{Nothing, DataFrame}[], names = String3[])
+function build_celegans_model(df_lattice::DataFrame; cross_sections::Vector{<: Union{Nothing, DataFrame}} = Union{Nothing, DataFrame}[], names = String3[])
 	seam_cell_data = df_lattice[:,2:4]
 	left_seam_cells = seam_cell_data[1:2:end, :]
 	right_seam_cells = seam_cell_data[2:2:end, :]

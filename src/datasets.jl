@@ -41,7 +41,11 @@ module Datasets
         return Base.getfield(ck, s)
     end
     function Base.range(ck::CellKey)
-        return range(ck.start, ck.stop)
+        r = range(ck.start, ck.stop)
+        rd = setdiff(r, ck.outliers)
+        real_start = minimum(rd)
+        real_stop = maximum(rd)
+        return range(real_start, real_stop)
     end
     
     struct NormalizedDataset <: AbstractDataset

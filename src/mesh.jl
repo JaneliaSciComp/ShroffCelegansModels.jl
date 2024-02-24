@@ -53,3 +53,24 @@
 		)
 		M = GeometryBasics.Mesh(pts, faces)
 	end
+	function get_model_manifold_mesh_components(
+		model::AbstractCelegansModel;
+		transform_points = identity
+	)
+		r = LinRange(0, 1, length(model))
+		_splines = [transverse_spline(model,1) central_spline(model) transverse_spline(model,17)]
+		sections = map(r) do t
+			Point3f.(t .|> _splines)
+		end
+		pts = transform_points.(Iterators.flatten(sections))
+		offsets = (0:length(pts)÷3-2) .* (QuadFace(3,3,3,3),)
+		faces = QuadFace[(1,2,5,4) (2,3,6,5)] .+ offsets
+		return pts, vec(faces)
+	end
+	function get_model_manifold_mesh(
+		model::AbstractCelegansModel;
+		transform_points = identity
+	)
+		pts, faces = get_model_manifold_mesh_components(model; transform_points)
+		return GeometryBasics.Mesh(pts, faces)
+	end

@@ -21,6 +21,7 @@ function (mts::ModelTimeSeries)(time_offset::Integer)
         end
     catch err
         if err isa BoundsError
+            @warn "BoundsError" time_offset timepoint lattice_filepath
             return nothing
         else
             rethrow(err)
@@ -40,7 +41,7 @@ function StraightenedModelTimeSeries(dataset::NormalizedDataset; max_cache_size 
     mts = ModelTimeSeries(dataset; max_cache_size)
     StraightenedModelTimeSeries(mts, LRU{String, Union{StraightenedCelegansModel,Missing}}(; maxsize = max_cache_size))
 end
-function (smts::StraightenedModelTimeSeries)(time_offset::Integer)
+function (smts::StraightenedModelTimeSeries)(time_offset::Integer)::Union{Nothing, Missing, StraightenedCelegansModel}
     mts = smts.modelTimeSeries
     try
         timepoint = range(mts.dataset.cell_key)[time_offset]
@@ -57,11 +58,11 @@ function (smts::StraightenedModelTimeSeries)(time_offset::Integer)
         if err isa BoundsError
             return nothing
         else
-            rethrow(err)
+            rethrow()
         end
     end
 end
-function (smts::StraightenedModelTimeSeries)(time_offset; n_upsample = 0)
+function (smts::StraightenedModelTimeSeries)(time_offset, n_upsample=0)
     next = nextModelIndex(smts, time_offset)
     prev = prevModelIndex(smts, time_offset)
     if isnothing(next) && isnothing(prev)
@@ -74,9 +75,23 @@ function (smts::StraightenedModelTimeSeries)(time_offset; n_upsample = 0)
         return average([smts(next)]; n_upsample)
     end
     if next == prev
-        return average([smts(next)]; n_upsample)
+        model = smts(next)
+        if !isnothing(model)
+            return average([model]; n_upsample)
+        else
+            return nothing
+        end
     end
-    return average([smts(prev), smts(next)], AnalyticWeights([next - time_offset, time_offset - prev]); n_upsample)
+    models = [smts(prev), smts(next)]
+    if isnothing(models[1]) && isnothing(models[2])
+        return nothing
+    elseif isnothing(models[1])
+        return average([models[2]]; n_upsample)
+    elseif isnothing(models[2])
+        return average([models[1]]; n_upsample)
+    else
+        return average(models, AnalyticWeights([next - time_offset, time_offset - prev]); n_upsample)
+    end
 end
 
 function get_lattice(ds::NormalizedDataset, time_offset=1)::Union{Missing, String}

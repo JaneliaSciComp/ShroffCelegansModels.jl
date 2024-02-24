@@ -119,4 +119,9 @@ function MakieCore.text!(ax, model::AbstractCelegansModel, f::Function = identit
     # text!(ax, f.(right_spline.(pts)); text = ShroffCelegansModels.Types.names(model)[2:2:end])
 end
 
+# const voxel_size = 0.1625 # um
+
 swapyz(p::P) where P <: Point3 = P(p[1], p[3], p[2])
+swapyz_scale(p::P) where P <: Point3 = P(p[1], p[3], p[2]) * voxel_size
+swapyz_unscale(p::P) where P <: Point3 = P(p[1], p[3], p[2]) / voxel_size
+scale_dims(p::P) where P <: Point3 = P(p[1], p[2], p[3]) * voxel_size

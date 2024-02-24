@@ -9,7 +9,11 @@ module ShroffCelegansModels
 	using BSplineKit
 	using QuadGK
 	using LRUCache
+	using FFTW
 	using PrecompileTools: @setup_workload, @compile_workload
+
+	include("datasets.jl")
+	include("MIPAVIO.jl")	
 
 	include("util.jl")
 	include("ParametricSplines.jl")
@@ -23,7 +27,6 @@ module ShroffCelegansModels
 	include("straighten.jl")
 
 	include("average.jl")
-	include("datasets.jl")
 
 	using .Datasets
 
@@ -33,6 +36,9 @@ module ShroffCelegansModels
 	using .Points
 
 	include("model_time_series.jl")
+	include("area.jl")
+
+	include("annotation_untwist.jl")
 
 	include("precompile.jl")
 
