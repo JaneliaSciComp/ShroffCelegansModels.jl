@@ -30,6 +30,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 
 [compat]
+ColorSchemes = "3"
 julia = "1"
 
 [extras]
