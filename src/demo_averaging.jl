@@ -10,56 +10,12 @@ using CSV
 using DataFrames
 using BSplineKit
 using ThinPlateSplines
+using CoordinateTransformations
+using FFTW
+using ProgressMeter
 
-#const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_full.json"
-const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2024_01_10_v2.json"
-const voxel_size = 0.1625 # um
-
-function read_config_json(config_path::AbstractString = config_path)
-    config_json = JSON3.read(config_path)
-    cell_keys = Dict{String, Vector{ShroffCelegansModels.CellKey}}()
-    map(config_json.data.strains) do strain
-        cell_keys[strain.name] = map(strain.folderpaths) do folder_path
-            cell_key_path = joinpath(folder_path, "cell_key.json")
-            try
-                cell_key_json = JSON3.read(cell_key_path)
-                ShroffCelegansModels.CellKey(cell_key_json)
-            catch err
-                throw(ArgumentError("Problem parsing $cell_key_path"))
-            end
-        end
-    end
-
-    datasets = Dict{String, Vector{ShroffCelegansModels.NormalizedDataset}}()
-    map(config_json.data.strains) do strain
-        datasets[strain.name] = map(strain.folderpaths) do folder_path
-            ShroffCelegansModels.NormalizedDataset(joinpath(folder_path, "RegB"))
-        end
-    end
-    return config_json, cell_keys, datasets
-end
-
-config_json, cell_keys, datasets = read_config_json()
-
-flattened_datasets = collect(Iterators.flatten(values(datasets)))
-
-min_length = map(flattened_datasets) do ds
-    length(range(ds.cell_key))
-end |> minimum
-
-function get_lattice(ds::ShroffCelegansModels.Datasets.NormalizedDataset, time_offset=1)::Union{Missing, String}
-    timepoint = range(ds.cell_key)[time_offset]
-    if timepoint ∈ ds.cell_key.outliers
-        return missing
-    else
-        filepath = joinpath(ds.path, "Decon_reg_$(timepoint)", "Decon_reg_$(timepoint)_results", "lattice_final", "lattice.csv")
-        if isfile(filepath)
-            return filepath
-        else
-            throw(ArgumentError("$filepath is not a file on disk and is not marked as an outlier."))
-        end
-    end
-end
+include("demo_averaging/read_config_json.jl")
+include("demo_averaging/get_lattice.jl")
 
 function build_models_over_time(dataset::ShroffCelegansModels.Datasets.NormalizedDataset, offsets = 1:length(range(dataset.cell_key)))
     models = map(offsets) do time_offset
@@ -76,7 +32,6 @@ function build_models_over_time(dataset::ShroffCelegansModels.Datasets.Normalize
     return models, smodels
 end
 
-models, smodels = build_models_over_time(datasets["RW10598"][2]);
 
 function average_sliders(models::Vector{<:AbstractCelegansModel})
     f = Figure(size = (1920, 1080))
@@ -320,40 +275,25 @@ function record_average_sliders_with_volumes(smts::ShroffCelegansModels.Straight
     end
 end
 
-normal_flattened_datasets = filter(x->length(range(x.cell_key)) != 259, flattened_datasets)
-normal_flattened_datasets = filter(x->x.cell_key.name != "Vab-1_Pos0",normal_flattened_datasets)
-smts_datasets = ShroffCelegansModels.StraightenedModelTimeSeries.(normal_flattened_datasets)
-lengths = normal_flattened_datasets .|> x->length(range(x.cell_key))
-smts_datasets_nt = map(zip(smts_datasets, lengths)) do (ds, _length)
-    x -> begin
-        nt = x * (_length - 1) + 1.0
-        # @info "Normalized time" nt
-        ds(nt)
-    end
-end
-models_at_nt(nt) = map(smts_datasets_nt) do ds
-    ds(nt)
-end
-r = LinRange(0.0, 1.0, 201)
-avg_models = map(r) do nt
-    @info nt
-    models = models_at_nt(nt)
-    models = filter(!isnothing, models)
-    models = identity.(models)
-    ShroffCelegansModels.average(models; n_upsample = 2)
-end
-#=
-nothing_count = map(r) do nt
-    @info nt
-    models = models_at_nt(nt)
-    return sum(isnothing.(models))
-    models = filter(!isnothing, models)
-    models = identity.(models)
-    ShroffCelegansModels.average(models; n_upsample = 2)
-end
-=#
 function get_avg_models()
     r = LinRange(0.0, 1.0, 201)
+    first_avg_model = let models = models_at_nt(r[1])
+        models = filter(!isnothing, models)
+        models = identity.(models)
+        ShroffCelegansModels.average(models; n_upsample = 2)
+    end
+    avg_models = Vector{typeof(first_avg_model)}(undef, length(r))
+    avg_models[1] = first_avg_model
+    @showprogress desc="Averaging models..." Threads.@threads for i in eachindex(r)[2:end]
+        nt = r[i]
+        models = models_at_nt(nt) 
+        models = filter(!isnothing, models)
+        models = identity.(models)
+        avg_models[i] = ShroffCelegansModels.average(models; n_upsample = 2)
+    end
+    return avg_models
+
+    #=
     avg_models = map(r) do nt
         @info nt
         models = models_at_nt(nt)
@@ -361,6 +301,7 @@ function get_avg_models()
         models = identity.(models)
         ShroffCelegansModels.average(models; n_upsample = 2)
     end
+    =#
 end
 
 function show_average_models(models)
@@ -598,7 +539,10 @@ function get_cell_trajectory_dict(dataset::ShroffCelegansModels.Datasets.Normali
             if length(pairs) < 2
                 cell => missing
             else
-                cell => interpolate((first.(pairs) .- 1)/(length(trajectory)-1), last.(pairs), BSplineKit.BSplineOrder(2))
+                cell => extrapolate(
+                    interpolate((first.(pairs) .- 1)/(length(trajectory)-1), last.(pairs), BSplineKit.BSplineOrder(2)),
+                    Flat()
+                )
             end
         catch err
             @error "There was an issue getting cell trajectory" cell dataset.path trajectory
@@ -620,9 +564,6 @@ end
 function transform_annotations(from_model, to_model, annotations::Dict)
     return Dict(keys(annotations) .=> transform_annotations(from_model, to_model, collect(values(annotations))))
 end
-
-const annotation_position_cache = Dict{String, Any}()
-const my_annotation_position_cache = Dict{String, Any}()
 
 function show_average_models_with_annotations(
     models,
@@ -885,17 +826,6 @@ function show_average_models_with_annotations_demo(models, _annotation_positions
     f
 end
 =#
-    int_ds = filter(flattened_datasets) do ds
-        "int1dr" in values(ds.cell_key.mapping)
-    end
-    smts2 = ShroffCelegansModels.StraightenedModelTimeSeries(int_ds[2])
-    _length2 = length(range(int_ds[2].cell_key))
-    smts_nt2 = x -> begin
-        nt = x * (_length2 - 1) + 1.0
-        # @info "Normalized time" nt
-        smts2(nt, 2)
-    end
-
 struct NormalizedTimeFunction{F}
     func::F # callable like F
     dataset::ShroffCelegansModels.NormalizedDataset # Parameterize this?
@@ -956,7 +886,7 @@ function debug_average_models_with_annotations(
     r = LinRange(0.0, 1.0, N_timepoints + 1)
     sliders = SliderGrid(f[3,1:2],
         (label="Time (Normalized)", range=r),
-        (label="Exp. Factor", range=1.0:0.01:1.5),
+        (label="Exp. Factor", range=1.0:0.01:4),
     )
     slider_range = sliders.sliders[1].range[]
 
@@ -1088,10 +1018,17 @@ function debug_average_models_with_annotations(
     twisted_central_line_match = vec(stack([twisted_annotation_cells[], twisted_central_pts[], fill!(similar(twisted_central_pts[]), Point3f(NaN))]; dims=1))
     twisted_central_line_match = Observable(twisted_central_line_match)
 
+    function get_annotation_text(dict)
+        String.(get.((dataset.cell_key.mapping,), Symbol.(keys(dict)), String.(keys(dict))))
+    end
+
     #_annotation_text = getindex.((dataset.cell_key.mapping,), Symbol.(keys(annotation_dict)))
-    _annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(annotation_dict)), String.(keys(annotation_dict))))
-    straight_annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(annotation_dict)), String.(keys(annotation_dict))))
-    twisted_annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(twisted_positions)), String.(keys(twisted_positions))))
+    #_annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(annotation_dict)), String.(keys(annotation_dict))))
+    #straight_annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(annotation_dict)), String.(keys(annotation_dict))))
+    #twisted_annotation_text = String.(get.((dataset.cell_key.mapping,), Symbol.(keys(twisted_positions)), String.(keys(twisted_positions))))
+    _annotation_text = get_annotation_text(annotation_dict)
+    straight_annotation_text = get_annotation_text(annotation_dict)
+    twisted_annotation_text = get_annotation_text(twisted_positions)
     twisted_annotation_text = Observable(twisted_annotation_text)
 
 
@@ -1168,6 +1105,7 @@ function debug_average_models_with_annotations(
             twisted_seam_cell_text[] = [String.(tmodel.names[1:2:end]); String.(tmodel.names[2:2:end])]
             annotation_positions = twisted_annotation_positions(value)
             if !ismissing(annotation_positions)
+                twisted_annotation_text[] = get_annotation_text(annotation_positions)
                 twisted_annotation_cells[] = collect(values(annotation_positions))
                 twisted_central_pts[] = swapyz_scale.(second(ShroffCelegansModels.nearest_central_pt(tmodel, swapyz_unscale.(twisted_annotation_cells[]), expansion_factor[])))
                 twisted_central_line_match[] = vec(stack([twisted_annotation_cells[], twisted_central_pts[], fill!(similar(twisted_central_pts[]), Point3f(NaN))]; dims=1))
@@ -1181,6 +1119,7 @@ function debug_average_models_with_annotations(
         annotation_positions = twisted_annotation_positions(value)
         if !ismissing(tmodel)
             if !ismissing(annotation_positions)
+                twisted_annotation_text[] = get_annotation_text(annotation_positions)
                 twisted_annotation_cells[] = collect(values(annotation_positions))
                 twisted_central_pts[] = swapyz_scale.(second(ShroffCelegansModels.nearest_central_pt(tmodel, swapyz_unscale.(twisted_annotation_cells[]), expansion_factor_value)))
                 twisted_central_line_match[] = vec(stack([twisted_annotation_cells[], twisted_central_pts[], fill!(similar(twisted_central_pts[]), Point3f(NaN))]; dims=1))
@@ -1456,6 +1395,8 @@ function debug_average_models_with_annotations(
     f
 end
 
+include("demo_averaging/show_average_annotations.jl")
+
 function check_dataset(dataset; show_data_frames = false)
     r = range(dataset.cell_key)
     for t in r
@@ -1508,6 +1449,7 @@ function check_dataset(dataset; show_data_frames = false)
 end
 
 using HDF5
+using Printf
 
 function save_celegans_model(
     parent::Union{HDF5.File, HDF5.Group},
@@ -1550,12 +1492,13 @@ function save_spline_interpolation(
     spline::SplineInterpolation,
     description::String = ""
 )
-    pts = BSplineKit.SplineInterpolations.interpolation_points(model.central_spline)
+    pts = BSplineKit.SplineInterpolations.interpolation_points(spline)
     collocation_points = spline.(pts)
     order = BSplineKit.order(spline)
     g = create_group(parent, name)
     g["abscissa"] = pts
     g["ordinate"] = collocation_points
+    g["coefficients"] = coefficients(spline)
     a = attrs(g)
     a["order"] = order
     a["boundary_conditions"] = "Natural"
@@ -1598,3 +1541,51 @@ function HDF5.datatype(t::Type{String3})
     return HDF5.Datatype(HDF5.hdf5_type_id(t))
 end
 =#
+
+function check_annotation_within_contour(io::IO, dataset; use_myuntwist = true)
+    mts = ShroffCelegansModels.ModelTimeSeries(dataset)
+    _length = length(range(dataset.cell_key))
+    expansion_factor = 1.2
+    output_lines = String[]
+    println(io, join(["Timepoint", "Key", "Name", "Ratio", "Delta", "Filepath"], ", "))
+    for t in 1:_length
+        model = mts(t)
+        annotations_path = ShroffCelegansModels.MIPAVIO.get_integrated_annotations_path(dataset, t)
+        annotation_dict = ShroffCelegansModels.twisted_annotations(dataset, t)
+        if ismissing(annotation_dict)
+            continue
+        end
+        pts = collect(values(annotation_dict))
+        z, central_pts, dist = ShroffCelegansModels.nearest_central_pt(model, pts, expansion_factor)
+        z2, central_pts2, dist2 = ShroffCelegansModels.nearest_central_pt(model, pts, 2.0)
+        map(zip(keys(annotation_dict), z2, dist, dist2)) do (key, z2, dist, dist2)
+            if !isfinite(dist)
+                max_radius = ShroffCelegansModels.max_radius_function(model)(z2)
+                ratio = dist2 / max_radius
+                dist_delta = dist2 - max_radius
+                name = get(dataset.cell_key.mapping, Symbol(key), key)
+                #@info "Not matched to central point" t key name ratio annotations_path
+                println(io, join(string.([t, key, name, ratio, dist_delta, annotations_path]), ","))
+            end
+        end
+    end
+    return nothing
+end
+function check_annotation_within_contour(filename::AbstractString, dataset; use_myuntwist=true)
+    open(filename, "w") do io
+        check_annotation_within_contour(io, dataset; use_myuntwist)
+    end
+end
+function check_annotation_within_contour(v::Vector{ShroffCelegansModels.Datasets.NormalizedDataset}; use_myuntwist=true)
+    foreach(v) do ds
+        try
+            p = splitpath(ds.path)
+            filename = "out_of_contour_" * join(p[3:end], "_") * ".csv"
+            check_annotation_within_contour(filename, ds; use_myuntwist)
+        catch err
+            @error ds err
+        end
+    end
+end
+
+# include("demo_averaging/loading.jl")

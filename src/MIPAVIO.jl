@@ -8,9 +8,10 @@ MIPAV is a Java program from the National Institutes of Health
 """
 module MIPAVIO
     using DataFrames: DataFrame
-    using GeometryBasics: Point3
+    using GeometryBasics: Point3, Point3f
     using CSV: CSV
     using ShroffCelegansModels: Datasets
+    using Statistics: mean
 
     export mipav_df_to_points, mipav_df_to_point_dict
 
@@ -26,9 +27,24 @@ module MIPAVIO
         end |> Dict{eltype(df.name), Point3{eltype(df.x_voxels)}}
     end
 
-    function get_integrated_annotations(ds::Datasets.NormalizedDataset, time_offset=1)
+    function get_integrated_annotations_path(ds::Datasets.NormalizedDataset, time_offset=1)
         data_path = joinpath("integrated_annotation","annotations.csv")
-        return CSV.read(get_model_csv(ds, data_path, time_offset), DataFrame)
+        return get_model_csv(ds, data_path, time_offset)
+    end
+
+    function get_integrated_annotations(ds::Datasets.NormalizedDataset, time_offset=1; validate = true)
+        path = get_integrated_annotations_path(ds, time_offset)
+        df = CSV.read(path, DataFrame)
+        if validate
+            names = df.name
+            for k in keys(ds.cell_key.mapping)
+                if string(k) ∉ names
+                    #error("$k is not in $(ds.path)")
+                    @warn "$k is not in $(path)"
+                end
+            end
+        end
+        return df
     end
 
     function get_integrated_annotations(::Type{Dict}, args...)

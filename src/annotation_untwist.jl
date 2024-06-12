@@ -1,23 +1,49 @@
 function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0)
     cs = ShroffCelegansModels.central_spline(model)
     Npts = length(model)
-    r = LinRange(0, 1, Npts)
-    central_pts = cs.(r)
+    z = LinRange(0, 1, Npts)
+    central_pts = cs.(z)
 
     # bound the distance check
+
+    #=
     ts1 = ShroffCelegansModels.transverse_spline(model, 1)
     ts1_pts = ts1.(r)
     radius1 = norm.(ts1_pts .- central_pts) .* expansion_factor
+    =#
+    max_r_func = ShroffCelegansModels.max_radius_function(model)
+    radius = max_r_func.(z)
 
     arg_pt_dist = map(pts) do pt
-        dist = norm.(central_pts .- pt)
+        unbounded_dist = norm.(central_pts .- pt)
         # bound check
-        dist[dist .> radius1] .= Inf
-        a = argmin(dist)
-        r[a], central_pts[a], dist[a]
+        a = 1
+        dist = copy(unbounded_dist)
+        for ef in expansion_factor
+            dist[unbounded_dist .> radius .* ef] .= Inf
+            a = argmin(dist)
+            b = argmin(unbounded_dist)
+            if dist[a] != Inf
+                break
+            end
+            dist = copy(unbounded_dist)
+        end
+        z[a], central_pts[a], dist[a]
     end
     second = x->x[2]
+    third = x->x[3]
     first.(arg_pt_dist), second.(arg_pt_dist), last.(arg_pt_dist)
+end
+
+function max_radius_function(model)
+    function max_radius(z)
+        tss = transverse_splines(model)
+        central_pt = central_spline(model)(z)
+        radii = map(tss) do ts
+            norm(ts(z) - central_pt)
+        end 
+        return maximum(radii)
+    end
 end
 
 function nearest_central_plane(model::AbstractCelegansModel, pts::AbstractVector{<: Point})
@@ -53,7 +79,7 @@ function nearest_central_plane(model::AbstractCelegansModel, pts::AbstractVector
 end
 
 function untwist_annotations(model::AbstractCelegansModel, pts::AbstractVector{<: Point})
-    t, ncp, pts_norm = nearest_central_pt(model, pts)
+    t, ncp, pts_norm = nearest_central_pt(model, pts, [1.0, 1.5, 2.0, 2.5])
     ts1 = ShroffCelegansModels.transverse_spline(model, 1)
     right = ts1.(t)
 
@@ -72,7 +98,8 @@ function untwist_annotations(model::AbstractCelegansModel, pts::AbstractVector{<
 
     angles = atan.(norm.(c) .*s, right_vec_unit .⋅ pts_vec_unit)
 
-    #return angles
+    # return angles
+    # return pts_norm
 
     # untwisted model
     smodel = StraightenedCelegansModel(model)
