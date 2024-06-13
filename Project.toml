@@ -43,6 +43,7 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 GLMakie = "0.10"
+ImageView = "0.12"
 MakieCore = "0.8"
 julia = "1"
 
