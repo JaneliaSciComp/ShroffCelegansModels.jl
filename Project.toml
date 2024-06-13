@@ -42,6 +42,7 @@ TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
+FixedPointNumbers = "0.8"
 GLMakie = "0.10"
 MakieCore = "0.8"
 julia = "1"
