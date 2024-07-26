@@ -1589,3 +1589,5 @@ function check_annotation_within_contour(v::Vector{ShroffCelegansModels.Datasets
 end
 
 # include("demo_averaging/loading.jl")
+include("demo_averaging/stretched_analysis.jl")
+include("demo_averaging/angle_heatmap.jl")

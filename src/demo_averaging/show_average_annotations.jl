@@ -148,15 +148,21 @@ function show_average_annotations(
         idx = round(Int, nt*N_timepoints + 1)
         _model = avg_models[idx]
         @info "annotation positions" nt
-        positions = swapyz_scale.(transform_annotations(
-            _smodel, _model, map(values(annotation_dict)) do ann
-                if ismissing(ann)
-                    return Point3(NaN)
-                else
-                    ann(nt)
+        positions = missing
+        try
+            positions = swapyz_scale.(transform_annotations(
+                _smodel, _model, map(values(annotation_dict)) do ann
+                    if ismissing(ann)
+                        return Point3(NaN)
+                    else
+                        ann(nt)
+                    end
                 end
-            end
-        ))
+            ))
+        catch err
+            @error "A problem occured at $nt with avg_model[$idx]" exception=(err, Base.catch_backtrace())
+            positions = [Point3(NaN) for i in eachindex(annotation_dict)]
+        end
         return positions
     end
 
@@ -338,6 +344,9 @@ function show_average_annotations(
     vlines!(ax_2d_3, sliders.sliders[1].value, color = :grey)
 
     on(throttle(0.1, sliders.sliders[1].value)) do value
+        set_close_to!(sliders.sliders[2], 0.05)
+        set_close_to!(sliders.sliders[3], 0.07)
+        set_close_to!(sliders.sliders[4], 0.04)
         idx = round(Int, value*N_timepoints + 1)
         model = avg_models[idx]
         n_sections = length(interpolation_points(model.central_spline))
@@ -476,9 +485,13 @@ function show_average_annotations(
     end
 
     on(annotation_menu.selection) do selected
+        #set_close_to!(sliders.sliders[2], 0.05)
+        #set_close_to!(sliders.sliders[3], 0.07)
+        #set_close_to!(sliders.sliders[4], 0.04)
         a = findfirst(==(selected), [common_annotations; seam_cell_text])
         pre_warp_selected = pre_warp_toggle.active[]
 
+        positions_over_time = Point3f[]
         if isnothing(a)
             println("Annotation $a not found")
         elseif a <= length(common_annotations)
@@ -497,7 +510,7 @@ function show_average_annotations(
                 swapyz_scale(positions[a2])
             end
         end
-        begin
+        if !isempty(positions_over_time)
             if sliders.sliders[2].value[] > 0 || sliders.sliders[3].value[] > 0 || sliders.sliders[4].value[] > 0
                 # positions_over_time = smooth_radial(positions_over_time, 1/sliders.sliders[2].value[])
                 positions_over_time = smooth_polar_dct1(positions_over_time, 1/sliders.sliders[2].value[], 1/sliders.sliders[3].value[], 1/sliders.sliders[4].value[])
@@ -519,50 +532,50 @@ function show_average_annotations(
             ylims!(ax_2d_2)
 
             try
-            #if a <= length(common_annotations)
-            begin
-                for g in eachindex(group_annotation_positions_over_time)
-                    (; dsX, dsY, dsZ) = dataset_lines[g]
-                    if a > length(common_annotations)
-                        dsX[] = [NaN]
-                        dsY[] = [NaN]
-                        dsZ[] = [NaN]
-                        continue
-                    end
-                    _positions_over_time = map(group_annotation_positions_over_time[g]) do v_d
-                        v_d[selected]
-                    end
-                    dsZ[] = (x->x[2]).(_positions_over_time)
-                    if !polar_view_selected
-                        dsX[] = first.(_positions_over_time)
-                        dsY[] = last.(_positions_over_time)
-                    else
-                        pfc = PolarFromCartesian()
-                        polar_coords = map(_positions_over_time) do position
-                            pfc(Point2(first(position), last(position)))
+                #if a <= length(common_annotations)
+                begin
+                    for g in eachindex(group_annotation_positions_over_time)
+                        (; dsX, dsY, dsZ) = dataset_lines[g]
+                        if a > length(common_annotations)
+                            dsX[] = [NaN]
+                            dsY[] = [NaN]
+                            dsZ[] = [NaN]
+                            continue
                         end
-                        dsX[] = (x->x.r).(polar_coords)
-                        dsY[] = (x->x.θ).(polar_coords)
+                        _positions_over_time = map(group_annotation_positions_over_time[g]) do v_d
+                            v_d[selected]
+                        end
+                        dsZ[] = (x->x[2]).(_positions_over_time)
+                        if !polar_view_selected
+                            dsX[] = first.(_positions_over_time)
+                            dsY[] = last.(_positions_over_time)
+                        else
+                            pfc = PolarFromCartesian()
+                            polar_coords = map(_positions_over_time) do position
+                                pfc(Point2(first(position), last(position)))
+                            end
+                            dsX[] = (x->x.r).(polar_coords)
+                            dsY[] = (x->x.θ).(polar_coords)
+                        end
+                    end
+
+                    if a <= length(common_annotations)
+
+                        value = sliders.sliders[1].value[]
+                        idx = round(Int, value*N_timepoints + 1)
+
+                        _selected_annotation[] = if sliders.sliders[2].value[] > 0
+                            _smooth_positions_over_time[][idx][a]
+                        else
+                            _annotation_positions_over_time[idx][a]
+                        end
+
                     end
                 end
-
-                if a <= length(common_annotations)
-
-                    value = sliders.sliders[1].value[]
-                    idx = round(Int, value*N_timepoints + 1)
-
-                    _selected_annotation[] = if sliders.sliders[2].value[] > 0
-                        _smooth_positions_over_time[][idx][a]
-                    else
-                        _annotation_positions_over_time[idx][a]
-                    end
-
-                end
+            catch err
+                #println(err)
+                rethrow(err)
             end
-        catch err
-            #println(err)
-            rethrow(err)
-        end
 
             if polar_view_selected
                 title_2d_1[] = "R ($selected), var = $(var(X[]))"

@@ -1,3 +1,5 @@
+using CircStats
+
 function stretched_analysis(smodel)
     model = parent(smodel)
     r = LinRange(0,1,length(smodel))
