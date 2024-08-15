@@ -1,4 +1,9 @@
 using ProgressMeter
+using Statistics: mean, var
+using CoordinateTransformations
+using FFTW: fftfreq, fft, ifft
+
+include("../makie.jl")
 
 function show_average_annotations(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
@@ -10,7 +15,8 @@ function show_average_annotations(
     f = Figure(size = (1920, 1080))
     
     title = Observable("Annotations Averaged Post-Warp")
-    ax = Axis3(f[1:3,1], aspect = (1, 10, 1); title)
+    #ax = Axis3(f[1:3,1], aspect = (1, 10, 1); title)
+    ax = LScene(f[1:3,1])
     polar_ax = PolarAxis(f[1:3,3]; title)
 
     title_2d_1 = Observable("X")
@@ -56,6 +62,9 @@ function show_average_annotations(
             [1,7] => Label(f, "Polar View"),
             [1,8] => polar_view_toggle,
     )
+
+    _common_path = common_path(datasets)
+    Label(f[6, 1:3], _common_path)
 
 
 
@@ -133,7 +142,7 @@ function show_average_annotations(
     scatter!(length_ax, current_length, marker='∘', color = :red, markersize=50)
     =#
 
-    model = avg_models[1]
+    model = avg_models[end]
 
     seam_cell_text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')]
     menu_options[] = [common_annotations; seam_cell_text]
@@ -284,16 +293,24 @@ function show_average_annotations(
 
     #mesh!(ax, _mesh; colorrange, color = _color, shading, transparency = true)
     scatter_color = use_myuntwist ? :gold : :blue
-    mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
-    meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
-    meshscatter!(ax, _annotation_cells; markersize = 1.0, color = scatter_color, alpha = 1)
+    mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1, inspectable = false)
+    meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1, inspectable = false)
+    meshscatter!(ax, _annotation_cells; markersize = 1.0, color = scatter_color, alpha = 1, inspectable = false)
     _selected_annotation = Observable(Point3(NaN))
-    meshscatter!(ax, _selected_annotation; markersize = 1.0, color = :red, alpha = 1)
+    meshscatter!(ax, _selected_annotation; markersize = 1.0, color = :red, alpha = 1, inspectable = false)
     text!(ax, _seam_cell_labels; text = seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
     connect!(ann_txt.visible, annotation_text_toggle.active)
     #lines!(ax, _lines, color = :black)
-    ylims!(ax, (0, 200))
+    # ylims!(ax, (0, 200))
+    ranges_labels = ax.scene[OldAxis][:ticks, :ranges_labels][]
+    ax.scene[OldAxis][:ticks, :ranges_labels][] = (
+        (ranges_labels[1][1], Float64.(0:25:200), ranges_labels[1][3]),
+        (ranges_labels[2][1], string.(0:25:200), ranges_labels[2][3]),
+    )
+    track3d = Observable(Point3f[])
+    lines!(ax, track3d, color = r, colormap = :lajolla)
+
 
     #=
 
@@ -333,6 +350,14 @@ function show_average_annotations(
         polar_coord = pfc(Point2(position[1], position[3]))
         Point2(polar_coord.θ, polar_coord.r)
     end
+    polar_track = lift(track3d) do positions
+        pfc = PolarFromCartesian()
+        map(positions) do position
+            polar_coord = pfc(Point2(position[1],position[3]))
+            Point2(polar_coord.θ, polar_coord.r)
+        end
+    end
+    lines!(polar_ax, polar_track; color = r, colormap = :lajolla)
     scatter!(polar_ax, polar_annotations; color = scatter_color)
     scatter!(polar_ax, polar_annotation_selected; color = :red)
     text!(polar_ax, polar_annotations; text = common_annotations)
@@ -343,10 +368,15 @@ function show_average_annotations(
     vlines!(ax_2d_2, sliders.sliders[1].value, color = :grey)
     vlines!(ax_2d_3, sliders.sliders[1].value, color = :grey)
 
+    smooth_init = false
+
     on(throttle(0.1, sliders.sliders[1].value)) do value
-        set_close_to!(sliders.sliders[2], 0.05)
-        set_close_to!(sliders.sliders[3], 0.07)
-        set_close_to!(sliders.sliders[4], 0.04)
+        if !smooth_init
+            set_close_to!(sliders.sliders[2], 0.05)
+            set_close_to!(sliders.sliders[3], 0.07)
+            set_close_to!(sliders.sliders[4], 0.04)
+            smooth_init = true
+        end
         idx = round(Int, value*N_timepoints + 1)
         model = avg_models[idx]
         n_sections = length(interpolation_points(model.central_spline))
@@ -361,6 +391,8 @@ function show_average_annotations(
             elseif a <= length(common_annotations)
                 _selected_annotation[] = _smooth_positions_over_time[][idx][a]
             else
+                 a2 = a - length(common_annotations)
+                 _selected_annotation[] = swapyz_scale(seam_cell_positions_over_time[idx][a2])
             end
         else
             _annotation_cells[] = _annotation_positions_over_time[idx]
@@ -368,6 +400,8 @@ function show_average_annotations(
             elseif a <= length(common_annotations)
                 _selected_annotation[] = _annotation_positions_over_time[idx][a]
             else
+                a2 = a - length(common_annotations)
+                _selected_annotation[] = swapyz_scale(seam_cell_positions_over_time[idx][a2])
             end
         end
 
@@ -466,13 +500,23 @@ function show_average_annotations(
     Z = Observable(zeros(size(r)))
     lines!(ax_2d_3, r, Z, color = :blue)
 
-    dataset_lines = map(datasets) do datasets
+    linestyles = [:solid, :dot, :dash]
+    dataset_lines = map(collect(pairs(datasets))) do (idx,datasets)
         dsX = Observable(zeros(size(r)))
-        lines!(ax_2d_1, r, dsX, color = :gray)
+        function inspector_label(self, i, p)
+            r = range(datasets.cell_key)
+            nt = first(p)
+            t = length(r) * nt + first(r)
+            t_rounded = round(Int, t, RoundNearest)
+            return  "t=" * string(t) * ": " *
+                replace(datasets.path, _common_path => "")[2:end] *
+                "\\Decon_Reg_$(t_rounded)" 
+        end
+        lines!(ax_2d_1, r, dsX; color = :gray, linestyle=linestyles[idx], inspector_label)
         dsY = Observable(zeros(size(r)))
-        lines!(ax_2d_2, r, dsY, color = :gray)
+        lines!(ax_2d_2, r, dsY; color = :gray, linestyle=linestyles[idx], inspector_label)
         dsZ = Observable(zeros(size(r)))
-        lines!(ax_2d_3, r, dsZ, color = :gray)
+        lines!(ax_2d_3, r, dsZ; color = :gray, linestyle=linestyles[idx], inspector_label)
         (; dsX, dsY, dsZ)
     end
 
@@ -510,11 +554,16 @@ function show_average_annotations(
                 swapyz_scale(positions[a2])
             end
         end
-        if !isempty(positions_over_time)
+        if isempty(positions_over_time)
+            track3d[] = positions_over_time
+        else
             if sliders.sliders[2].value[] > 0 || sliders.sliders[3].value[] > 0 || sliders.sliders[4].value[] > 0
                 # positions_over_time = smooth_radial(positions_over_time, 1/sliders.sliders[2].value[])
                 positions_over_time = smooth_polar_dct1(positions_over_time, 1/sliders.sliders[2].value[], 1/sliders.sliders[3].value[], 1/sliders.sliders[4].value[])
             end
+
+            track3d[] = positions_over_time
+
             polar_view_selected = polar_view_toggle.active[]
             if !polar_view_selected
                 X[] = first.(positions_over_time)
@@ -569,6 +618,13 @@ function show_average_annotations(
                         else
                             _annotation_positions_over_time[idx][a]
                         end
+                    else
+                        _selected_annotation[] = Point3f(NaN)
+                        a2 = a - length(common_annotations)
+                        
+                        value = sliders.sliders[1].value[]
+                        idx = round(Int, value*N_timepoints + 1)
+                        _selected_annotation[] = swapyz_scale(seam_cell_positions_over_time[idx][a2])
 
                     end
                 end
@@ -597,7 +653,19 @@ function show_average_annotations(
         #annotation_menu.selection[] = annotation_menu.selection[]
     end
 
+    DataInspector(f)
     display(f)
+
+    # y-axis
+    ranges_labels = ax.scene[OldAxis][:ticks, :ranges_labels][]
+    ax.scene[OldAxis][:ticks, :ranges_labels][] = (
+        (ranges_labels[1][1], Float64.(0:25:200), ranges_labels[1][3]),
+        (ranges_labels[2][1], string.(0:25:200), ranges_labels[2][3]),
+    )
+
+    # needed to restore model to first timepoint
+    notify(sliders.sliders[1].value)
+
     f
 end
 
@@ -728,4 +796,12 @@ function smooth_polar_dct2(positions_over_time, σ)
         Point3(_cartesian[1], z, _cartesian[2])
     end
     return positions_over_time
+end
+
+function common_path(datasets)
+    path_parts = map(datasets) do ds
+        splitpath(ds.path)
+    end
+    common_path_parts = reduce(intersect, path_parts)
+    return joinpath(@view common_path_parts[1:end-1])
 end

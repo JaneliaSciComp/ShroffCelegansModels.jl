@@ -66,6 +66,7 @@ end
 =#
 
 
+const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
 const annotation_position_cache = Dict{String, Any}()
 #const my_annotation_position_cache = Dict{String, Any}()
 const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()

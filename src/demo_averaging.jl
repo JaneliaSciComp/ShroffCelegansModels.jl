@@ -90,11 +90,7 @@ function cross_sections_at_knots(model)
     return vec(sections)
 end
 
-function seam_cell_pts(model, n_upsample)
-    pts = interpolation_points(model)[1:2^n_upsample:end]
-    _transverse_splines = transverse_splines(model)
-    [_transverse_splines[1].(pts); _transverse_splines[17].(pts)]
-end
+include("demo_averaging/seam_cell_pts.jl")
 
 #=
 function tps_deform_old(x2::AbstractArray,tps::ThinPlateSpline) where T<:Any
@@ -402,34 +398,7 @@ function get_straightened_annotations(ds::ShroffCelegansModels.Datasets.Normaliz
     end
 end
 
-const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
-
-function load_straightened_annotations_over_time(dataset::ShroffCelegansModels.Datasets.NormalizedDataset, offsets::UnitRange = 1:length(range(dataset.cell_key)); use_myuntwist::Bool = false)
-    key = (dataset.path, offsets, use_myuntwist)
-    if haskey(annotations_cache, key)
-        return annotations_cache[key]
-    end
-    if use_myuntwist
-        annotations = map(offsets) do time_offset
-            ShroffCelegansModels.untwist_annotations(dataset, time_offset)
-        end
-        annotations_cache[key] = annotations
-        return annotations
-    else
-        annotations = map(offsets) do time_offset
-            path = get_straightened_annotations(dataset, time_offset)
-            if ismissing(path)
-                return missing
-            end
-            annotation_df = CSV.read(path, DataFrame)
-            pts = Point3f.(eachrow(Matrix(annotation_df)[:, 2:4]))
-            pts .-= get_straightened_lattice_xy_center(dataset, time_offset)
-            Dict(annotation_df[:,1] .=> pts)
-        end
-        annotations_cache[key] = annotations
-        return annotations
-    end
-end
+include("demo_averaging/load_straightened_annotations_over_time.jl")
 
 function get_model_csv(ds::ShroffCelegansModels.Datasets.NormalizedDataset, data_path, time_offset=1)::Union{Missing, String}
     timepoint = range(ds.cell_key)[time_offset]
@@ -520,38 +489,7 @@ function plot_int_cells(avg_models; flattened_datasets = flattened_datasets)
     return f
 end
 
-function get_cell_trajectory_dict(dataset::ShroffCelegansModels.Datasets.NormalizedDataset; use_myuntwist = false)
-    annotations = load_straightened_annotations_over_time(dataset; use_myuntwist)
-    cells = collect(keys(annotations[1]))
-
-    cell_trajectory_dict = map(cells) do cell
-        trajectory = map(eachindex(annotations)) do i
-            if ismissing(annotations[i]) || !haskey(annotations[i], cell) || any(!isfinite, annotations[i][cell])
-                missing
-            else
-                annotations[i][cell]
-            end
-        end
-        pairs = Iterators.filter(((i,p),)->!ismissing(p),zip(eachindex(trajectory), trajectory))
-        pairs = collect(pairs)
-        # cell => (first.(pairs), last.(pairs))
-        try
-            if length(pairs) < 2
-                cell => missing
-            else
-                cell => extrapolate(
-                    interpolate((first.(pairs) .- 1)/(length(trajectory)-1), last.(pairs), BSplineKit.BSplineOrder(2)),
-                    Flat()
-                )
-            end
-        catch err
-            @error "There was an issue getting cell trajectory" cell dataset.path trajectory
-            rethrow()
-        end
-    end |> Dict
-
-    return cell_trajectory_dict
-end
+include("demo_averaging/get_cell_trajectory_dict.jl")
 
 function transform_annotations(from_model, to_model, annotations::AbstractVector{<: Point})
     warp_from = ShroffCelegansModels.lattice(from_model) |> vec

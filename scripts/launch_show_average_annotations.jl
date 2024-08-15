@@ -2,14 +2,23 @@ using Pkg
 using Revise
 cd(dirname(@__DIR__))
 Pkg.activate(dirname(@__DIR__))
+using JSON3
+using ShroffCelegansModels
+using Printf
+using HDF5
 
 using InteractiveUtils
 
 @info "Loading demo_averaging.jl..."
-@time_imports include("../src/demo_averaging.jl")
+@time_imports include("../src/demo_averaging/read_config_json.jl")
+@time_imports include("../src/demo_averaging/modelio.jl")
+# @time_imports include("../src/demo_averaging.jl")
 @info "Loading data..."
 @time_imports include("../src/demo_averaging/loading.jl")
 @info "Loading show_average_annotations.jl..."
+@time_imports include("../src/demo_averaging/seam_cell_pts.jl")
+@time_imports include("../src/demo_averaging/load_straightened_annotations_over_time.jl")
+@time_imports include("../src/demo_averaging/get_cell_trajectory_dict.jl")
 @time_imports include("../src/demo_averaging/show_average_annotations.jl")
 
 const keep_running = Ref(true)
