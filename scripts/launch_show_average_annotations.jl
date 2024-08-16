@@ -26,6 +26,8 @@ const keep_running = Ref(true)
 function select_dataset()
     fig = Figure()
     label = Makie.Label(fig[1,1], "Please select a dataset:")
+    menu_options = collect(keys(datasets))
+    pushfirst!(menu_options, "[click to select a dataset]")
     menu = Menu(fig[2,1], options = collect(keys(datasets)))
     on(menu.selection) do selection
         @info "Launching show_average_annotations(...)" selection

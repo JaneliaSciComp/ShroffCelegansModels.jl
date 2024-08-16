@@ -309,7 +309,10 @@ function show_average_annotations(
         (ranges_labels[2][1], string.(0:25:200), ranges_labels[2][3]),
     )
     track3d = Observable(Point3f[])
-    lines!(ax, track3d, color = r, colormap = :lajolla)
+    track3d_color = lift(track3d) do track3d
+        eachindex(track3d)
+    end
+    lines!(ax, track3d, color = track3d_color, colormap = :lajolla)
 
 
     #=
@@ -357,7 +360,7 @@ function show_average_annotations(
             Point2(polar_coord.θ, polar_coord.r)
         end
     end
-    lines!(polar_ax, polar_track; color = r, colormap = :lajolla)
+    lines!(polar_ax, polar_track; color = track3d_color, colormap = :lajolla)
     scatter!(polar_ax, polar_annotations; color = scatter_color)
     scatter!(polar_ax, polar_annotation_selected; color = :red)
     text!(polar_ax, polar_annotations; text = common_annotations)
