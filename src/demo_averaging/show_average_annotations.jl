@@ -805,6 +805,20 @@ function common_path(datasets)
     path_parts = map(datasets) do ds
         splitpath(ds.path)
     end
-    common_path_parts = reduce(intersect, path_parts)
+    common_path_parts = String[]
+    for (idx, part) in pairs(path_parts[1])
+        same = true
+        for path_part in path_parts
+            if length(path_part) >= idx && path_part[idx] != part
+                same = false
+                break
+            end
+        end
+        if same
+            push!(common_path_parts, part)
+        else
+            break
+        end
+    end
     return joinpath(@view common_path_parts[1:end-1])
 end

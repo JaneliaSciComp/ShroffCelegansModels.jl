@@ -1,5 +1,5 @@
 using Pkg
-using Revise
+#using Revise
 cd(dirname(@__DIR__))
 Pkg.activate(dirname(@__DIR__))
 using JSON3
@@ -24,12 +24,12 @@ using InteractiveUtils
 const keep_running = Ref(true)
 
 function select_dataset()
-    fig = Figure()
+    fig = Figure(; size=(800,600))
     label = Makie.Label(fig[1,1], "Please select a dataset:")
     menu_options = collect(keys(datasets))
     void_option = "[click to select a dataset]"
     pushfirst!(menu_options, void_option)
-    menu = Menu(fig[2,1], options = menu_options)
+    menu = Menu(fig[2,1], options = menu_options, width = 400)
     on(menu.selection) do selection
         if selection == void_option
             return
