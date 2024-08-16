@@ -27,9 +27,13 @@ function select_dataset()
     fig = Figure()
     label = Makie.Label(fig[1,1], "Please select a dataset:")
     menu_options = collect(keys(datasets))
-    pushfirst!(menu_options, "[click to select a dataset]")
-    menu = Menu(fig[2,1], options = collect(keys(datasets)))
+    void_option = "[click to select a dataset]"
+    pushfirst!(menu_options, void_option)
+    menu = Menu(fig[2,1], options = menu_options)
     on(menu.selection) do selection
+        if selection == void_option
+            return
+        end
         @info "Launching show_average_annotations(...)" selection
         show_average_annotations(avg_models, datasets[selection]; use_myuntwist=true);
     end
