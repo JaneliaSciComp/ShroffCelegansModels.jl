@@ -6,7 +6,7 @@ using JSON3
 using ShroffCelegansModels
 using Printf
 using HDF5
-
+using ThinPlateSplines # tps_solve
 using InteractiveUtils
 
 @info "Loading demo_averaging.jl..."
