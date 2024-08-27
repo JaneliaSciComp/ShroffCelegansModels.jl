@@ -523,6 +523,34 @@ function show_average_annotations(
         (; dsX, dsY, dsZ)
     end
 
+    # Clicking on lines
+    function line_click(event, ax::Axis)
+        # event could be Makie.MouseButtonEvent or Makie.MouseEvent
+        if event.button == Mouse.left && event.action == Mouse.press
+            p, i = pick(ax.scene)
+            if p isa Lines
+                idx = findfirst(==(p.linestyle[]), linestyles)
+                if !isnothing(idx)
+                    nt = p[1][][i][1]
+                    r = range(datasets[idx].cell_key)
+                    t = length(r) * nt + first(r)
+                    t_rounded = round(Int, t, RoundNearest)
+                    str = "t=" * string(t) * ": " *
+                        replace(datasets[idx].path, _common_path => "")[2:end] *
+                        "\\Decon_Reg_$(t_rounded)" 
+                    path = datasets[idx].path * "\\Decon_Reg_$(t_rounded)"
+                    @info "Selected trajectory" path str
+                    #println(path)
+                    #println(str)
+                    #run(`explorer.exe $path`; wait = false)
+                end
+            end
+        end
+    end
+    on(events(ax_2d_1).mousebutton) do event
+        line_click(event, ax_2d_1)
+    end
+
     # For smoothing
     G(σ,s) = exp.(-fftfreq(s,s).^2 ./2 ./ σ^2)
 
