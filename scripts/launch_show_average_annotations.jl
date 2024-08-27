@@ -22,6 +22,22 @@ using InteractiveUtils
 @time_imports include("../src/demo_averaging/get_cell_trajectory_dict.jl")
 @time_imports include("../src/demo_averaging/show_average_annotations.jl")
 
+function alias_cache(drive_letter)
+    if drive_letter == "X"
+        return
+    end
+    for (k,v) in my_annotation_position_cache
+        k2 = replace(k, "X:\\" => "$(drive_letter):\\")
+        my_annotation_position_cache[k2] = v
+    end
+    for (k,v) in annotations_cache
+        a, b, c = k
+        a = replace(a, "X:\\" => "$(drive_letter):\\")
+        k2 = (a,b,c)
+        annotations_cache[k2] = v
+    end
+end
+
 const keep_running = Ref(true)
 
 function select_dataset()
@@ -49,6 +65,8 @@ function select_dataset()
     @info "Displaying menu."
     return display(fig)
 end
+
+alias_cache("X")
 
 while keep_running[]
     ds = select_dataset()
