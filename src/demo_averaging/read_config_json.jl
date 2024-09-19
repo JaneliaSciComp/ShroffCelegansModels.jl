@@ -8,7 +8,11 @@ function read_config_json(config_path::AbstractString = config_path)
                 cell_key_json = JSON3.read(cell_key_path)
                 ShroffCelegansModels.CellKey(cell_key_json)
             catch err
-                throw(ArgumentError("Problem parsing $cell_key_path"))
+                if isfile(cell_key_path)
+                    throw(ArgumentError("Problem parsing $cell_key_path"))
+                else
+                    throw(ErrorException("$cell_key_path does not exist"))
+                end
             end
         end
     end
