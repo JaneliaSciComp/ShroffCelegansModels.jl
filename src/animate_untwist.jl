@@ -216,3 +216,144 @@ function animate_untwist(smodel; fig = nothing)
     end
     return fig
 end
+
+function controllable_untwist(smodel; fig = nothing)
+    model = smodel.twisted_model
+    _pts, _faces = ShroffCelegansModels.get_model_manifold_mesh_components(model)
+    r = LinRange(0,1,length(smodel))
+    spts = ShroffCelegansModels.central_spline(smodel).(r)
+
+    # fig = Figure()
+
+    # ax = Axis3(fig[1,1], aspect=:data)
+
+    cs_pts = ShroffCelegansModels.central_spline(model).(r)
+    scs_pts = ShroffCelegansModels.central_spline(smodel).(r)
+
+    if isnothing(fig)
+        out = lines([cs_pts; swapyz.(scs_pts)]; visible = false)
+        fig = out.figure
+        ax = out.axis
+        resize!(fig, 1920, 1080)
+        display(fig)
+    else
+        ax = fig.current_axis[]
+    end
+    #return fig
+
+    #display(fig)
+    
+    M, pts = stretch_worm(_pts, _faces, spts, 0.0)
+    M = Observable(M)
+    L = Observable(@view(pts[1:3:end]))
+    C = Observable(@view(pts[2:3:end]))
+    R = Observable(@view(pts[3:3:end]))
+
+    model_mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points = p->swapyz(p - cs_pts[1])))
+    mesh_plot = mesh!(ax, model_mesh; transparency = true)
+    display(fig)
+    # sleep(1)
+
+    # for rep in 1:3
+    time = Observable(0)
+
+        mesh!(ax, M; shading = MakieCore.automatic, color = [i for c in 1:length(model) for i in 1:3], colormap = :buda)
+        # sleep(1)
+
+    on(time) do t
+
+        #for i in 0:10:100
+        if t <= 100
+            i = t
+            mesh_plot.alpha[] = (100-i)/100
+            sleep(0.1)
+        end
+
+        #return fig
+        if t > 100
+            lines!(ax, L, color=:red)
+            lines!(ax, C, color=:magenta)
+            lines!(ax, R, color=:green)
+        end
+
+        # display(fig)
+
+        # for i=0:10:100
+        if t > 100 && t <= 200
+            i = (t - 100)
+            M[], pts = stretch_worm(_pts, _faces, spts, 0.01*i)
+            L[] = @view(pts[1:3:end])
+            C[] = @view(pts[2:3:end])
+            R[] = @view(pts[3:3:end])
+            #=
+            if i == 0
+                sleep(1)
+            else
+                sleep(0.1)
+            end
+            =#
+        end
+        # for i=0:100
+        if t > 200 && t <= 300
+            i = t- 200
+            M[], pts = untwist_worm(_pts, _faces, spts, 0.01*i)
+            L[] = @view(pts[1:3:end])
+            C[] = @view(pts[2:3:end])
+            R[] = @view(pts[3:3:end])
+            #=
+            if i == 0
+                sleep(0.5)
+            else
+                sleep(0.01)
+            end
+            =#
+        end
+        # sleep(2)
+        #for i=100:-1:0
+        if t > 300 && t <= 400
+            i = 100 - (t - 300)
+            M[], pts = untwist_worm(_pts, _faces, spts, 0.01*i)
+            L[] = @view(pts[1:3:end])
+            C[] = @view(pts[2:3:end])
+            R[] = @view(pts[3:3:end])
+            #=
+            if i == 0
+                sleep(0.5)
+            else
+                sleep(0.01)
+            end
+            =#
+        end
+        # for i=100:-10:0
+        if t > 400 && t <= 500
+            i = 100 - (t-400)
+            M[], pts = stretch_worm(_pts, _faces, spts, 0.01*i)
+            L[] = @view(pts[1:3:end])
+            C[] = @view(pts[2:3:end])
+            R[] = @view(pts[3:3:end])
+            #=
+            if i == 0
+                sleep(1)
+            else
+                sleep(0.1)
+            end
+            =#
+        end
+
+        #for i in 100:-10:0
+        if t > 500 && t <= 600
+            i = 100 - (t - 500)
+            mesh_plot.alpha[] = (100-i)/100
+            # sleep(0.1)
+        end
+
+    end
+    return fig, time
+end
+
+function record_untwist(smodel)
+    untwist_fig, untwist_time = controllable_untwist(smodel)
+    record(untwist_fig, "untwist.mp4", 0:600) do t
+        untwist_time[] = t
+    end
+end
