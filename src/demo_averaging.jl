@@ -139,7 +139,7 @@ function average_sliders(smts::ShroffCelegansModels.StraightenedModelTimeSeries)
 
     mesh!(ax, _mesh; colorrange, color = _color, shading)
     meshscatter!(ax, _seam_cells; markersize = 10.0, color = :gray, alpha = 0.5)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 1000))
 
@@ -229,7 +229,7 @@ function average_sliders_with_volumes(smts::ShroffCelegansModels.StraightenedMod
 
     mesh!(ax, _mesh; colorrange, color = _color, shading)
     meshscatter!(ax, _seam_cells; markersize = 10.0, color = :gray, alpha = 0.5)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 1000))
 
@@ -350,7 +350,7 @@ function show_average_models(models)
 
     mesh!(ax, _mesh; colorrange, color = _color, shading)
     meshscatter!(ax, _seam_cells; markersize = 10.0, color = :gray, alpha = 0.5)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 1000))
 
@@ -595,7 +595,7 @@ function show_average_models_with_annotations(
     mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
     meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
     #lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 200))
@@ -721,7 +721,7 @@ function show_average_models_with_annotations_demo(models, _annotation_positions
     mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
     meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = :blue, alpha = 1)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     text!(ax, _annotation_cells; text = collect(keys(annotation_dict)), align = (:right, :bottom))
     #lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 200))
@@ -792,7 +792,6 @@ function mipav_df_to_point_dict(df::DataFrame)
     end |> Dict
 end
 
-second(x) = x[2]
 
 include("demo_averaging/debug_average_models_with_annotations.jl")
 include("demo_averaging/show_average_annotations.jl")
@@ -804,7 +803,7 @@ function check_dataset(dataset; show_data_frames = false)
         if !isfile(filepath)
             if t ∉ dataset.cell_key.outliers
                 @error "$filepath does not exist and is not an outlier"
-                println():wait
+                println()
             end
             continue
         end

@@ -144,7 +144,7 @@ function show_average_annotations(
 
     model = avg_models[end]
 
-    seam_cell_text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')]
+    seam_cell_text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]]
     menu_options[] = [common_annotations; seam_cell_text]
 
     _mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale))

@@ -300,7 +300,7 @@ function poster_average_models_with_annotations(
     mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
     meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom), visible = false)
     #lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 200))

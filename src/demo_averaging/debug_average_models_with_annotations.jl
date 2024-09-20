@@ -4,6 +4,8 @@ function debug_average_models_with_annotations(
     use_myuntwist = false,
     cache = use_myuntwist ? my_annotation_position_cache : annotation_position_cache
 )
+    second(x) = x[2]
+
     f = Figure(size = (1920, 1080))
     
     title_prewarp = Observable("Prewarp")
@@ -42,11 +44,11 @@ function debug_average_models_with_annotations(
     end
 
     mts = smts.modelTimeSeries
-    mts_nt = let _length = length(range(dataset.cell_key))
+    mts_nt = let _range = range(dataset.cell_key)
         x -> begin
-            nt = x * (_length - 1) + 1.0
+            nt = x * (length(_range) - 1) + 1.0
             nt = round(Int, nt)
-            title_twisted[] = "Twisted; idx = $nt"
+            title_twisted[] = "Twisted; idx = $nt, tp = $(_range[nt])"
             mts(nt)
         end
     end
@@ -179,7 +181,7 @@ function debug_average_models_with_annotations(
     mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
     meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     ann_txt = text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
     connect!(ann_txt.visible, annotation_text_toggle.active)
     #lines!(ax, _lines, color = :black)
@@ -188,13 +190,13 @@ function debug_average_models_with_annotations(
     mesh!(ax_prewarp, straight_mesh; colorrange, color = straight_color, transparency = true, alpha = 0.1)
     meshscatter!(ax_prewarp, straight_seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax_prewarp, straight_annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax_prewarp, straight_seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax_prewarp, straight_seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     ann_txt = text!(ax_prewarp, straight_annotation_cells; text = straight_annotation_text, align = (:right, :bottom))
     connect!(ann_txt.visible, annotation_text_toggle.active)
     #lines!(ax_prewarp, _lines, color = :black)
     ylims!(ax_prewarp, (0, 200))
 
-    twisted_seam_cell_text = Observable(String.([tmodel.names[1:2:end]; tmodel.names[2:2:end]]))
+    twisted_seam_cell_text = Observable(String.([tmodel.names[2:2:end]; tmodel.names[1:2:end]]))
 
     mesh!(ax_twisted, twisted_mesh; colorrange, color = twisted_color, transparency = true, alpha = 0.5)
     lines!(ax_twisted, twisted_central_spline)
@@ -311,7 +313,7 @@ function debug_average_models_with_annotations(
         x -> begin
             nt = x * (length(_range) - 1) + 1.0
             nt = round(Int, nt)
-            title_twisted[] = "Twisted; idx = $nt, tp = $(range[nt])"
+            title_twisted[] = "Twisted; idx = $nt, tp = $(_range[nt])"
             mts(nt)
         end
     end
@@ -425,7 +427,7 @@ function debug_average_models_with_annotations(
     mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.1)
     meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax, _seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
     #lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 200))
@@ -433,12 +435,12 @@ function debug_average_models_with_annotations(
     mesh!(ax_prewarp, straight_mesh; colorrange, color = straight_color, transparency = true, alpha = 0.1)
     meshscatter!(ax_prewarp, straight_seam_cells; markersize = 1.0, color = :gray, alpha = 1)
     meshscatter!(ax_prewarp, straight_annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
-    text!(ax_prewarp, straight_seam_cell_labels; text = [model.names[1:2:end]; replace.(model.names[1:2:end], 'L' => 'R')], align = (:right, :bottom))
+    text!(ax_prewarp, straight_seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     text!(ax_prewarp, straight_annotation_cells; text = straight_annotation_text, align = (:right, :bottom))
     #lines!(ax_prewarp, _lines, color = :black)
     ylims!(ax_prewarp, (0, 200))
 
-    twisted_seam_cell_text = Observable([tmodel.names[1:2:end]; tmodel.names[2:2:end]])
+    twisted_seam_cell_text = Observable([tmodel.names[2:2:end]; tmodel.names[1:2:end]])
 
     mesh!(ax_twisted, twisted_mesh; colorrange, color = twisted_color, transparency = true, alpha = 0.5)
     meshscatter!(ax_twisted, twisted_seam_cells; markersize = 1.0, color = :gray, alpha = 0.5, transparency = true)
@@ -462,7 +464,7 @@ function debug_average_models_with_annotations(
             x -> begin
                 nt = x * (_length - 1) + 1.0
                 nt = round(Int, nt)
-                title_twisted[] = "Twisted; idx = $nt"
+                title_twisted[] = "Twisted; idx = $nt, tp = $(_range[nt])"
                 mts(nt)
             end
         end
