@@ -1,5 +1,13 @@
 using HDF5
+using Printf
 using GeometryBasics
+
+if !@isdefined(my_annotation_position_cache)
+    const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
+end
+if !@isdefined(annotations_cache)
+    const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
+end
 
 function save_annotation_cache()
     # my_annotation_position_cache
