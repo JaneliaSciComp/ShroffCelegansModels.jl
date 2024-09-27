@@ -38,6 +38,21 @@ function alias_cache(drive_letter)
     end
 end
 
+function alias_cache_unix(prefix)
+    for (k,v) in my_annotation_position_cache
+        k2 = replace(k, raw"X:\\" => "$(prefix)")
+        k2 = replace(k2, "\\" => "/")
+        my_annotation_position_cache[k2] = v
+    end
+    for (k,v) in annotations_cache
+        a, b, c = k
+        a = replace(a, raw"X:\\" => "$(prefix)")
+        a = replace(a, "\\" => "/")
+        k2 = (a,b,c)
+        annotations_cache[k2] = v
+    end
+end
+
 const keep_running = Ref(true)
 
 function select_dataset()
@@ -68,18 +83,24 @@ function select_dataset()
     return display(fig)
 end
 
-alias_cache("X")
+alias_cache_unix("/nearline/shroff")
 
-while keep_running[]
-    ds = select_dataset()
-    if !isnothing(ds)
-        wait(ds)
+function main()
+    while keep_running[]
+        ds = select_dataset()
+        if !isnothing(ds)
+            wait(ds)
+        end
     end
+
+    println()
+    @info "Press any key to quit"
+    readline()
 end
 
-println()
-@info "Press any key to quit"
-readline()
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end
 
 #@info "Launching show_average_annotations(...)"
 #show_average_annotations(avg_models, datasets["RW10742"]; use_myuntwist=true);

@@ -685,7 +685,7 @@ function show_average_annotations(
     end
 
     DataInspector(f)
-    display(f)
+    # display(f)
 
     # y-axis
     ranges_labels = ax.scene[OldAxis][:ticks, :ranges_labels][]
