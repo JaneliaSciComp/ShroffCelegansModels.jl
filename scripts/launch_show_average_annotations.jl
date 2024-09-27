@@ -59,7 +59,9 @@ function select_dataset()
         @info "Qutting..."
         global keep_running
         keep_running[] = false
-        GLMakie.closeall()
+        if @isdefined(GLMakie)
+            GLMakie.closeall()
+        end
         return nothing
     end
     @info "Displaying menu."
