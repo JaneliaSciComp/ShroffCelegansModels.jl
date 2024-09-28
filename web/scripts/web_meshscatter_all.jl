@@ -8,7 +8,9 @@ function meshscatter_all_webapp()
     app = App(; title="Shroff Lab: C. elegans meshscatter_all") do
         return with_theme(meshscatter_all, theme_black())
     end
-    server = Server(app, "shroff-data.int.janelia.org", 8082)
+    server = Server(app, "shroff-data.int.janelia.org", 8082;
+        proxy_url="https://shroff-data.int.janelia.org/meshscatter_all/"
+    )
     return server
 end
 
@@ -23,4 +25,6 @@ function main()
     readline()
 end
 
-main()
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end
