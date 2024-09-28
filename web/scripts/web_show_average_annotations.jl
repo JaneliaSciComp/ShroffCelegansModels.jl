@@ -1,6 +1,11 @@
 using WGLMakie
 using Bonito
 
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    global run_web_main::Bool = true
+end
+
 include("../../scripts/launch_show_average_annotations.jl")
 
 function web_show_average_annotations(datasets = datasets)
@@ -29,7 +34,11 @@ function web_main()
     server = web_show_average_annotations()
 end
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    web_main()
-end
+println(@__FILE__)
+println(abspath(PROGRAM_FILE))
 
+if run_web_main
+    wait(web_main())
+    println("Press enter to quit")
+    readline()
+end
