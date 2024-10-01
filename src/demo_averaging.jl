@@ -831,12 +831,14 @@ function check_dataset(dataset; show_data_frames = false)
                 end
             end
             if !isempty(repeated_names) || !isempty(missing_names)
+                s = stat(filepath)
+                modified_time = Dates.unix2datetime(s.mtime)
                 if !isempty(repeated_names) && !isempty(missing_names)
-                    @error "Name error in $filepath" repeated_names missing_names
+                    @error "Name error in $filepath" repeated_names missing_names modified_time
                 elseif !isempty(repeated_names)
-                    @error "Repeated names in $filepath" repeated_names
+                    @error "Repeated names in $filepath" repeated_names modified_time
                 elseif !isempty(missing_names)
-                    @error "Missing names in $filepath" missing_names
+                    @error "Missing names in $filepath" missing_names modified_time
                 end
                 show_data_frames && display(df)
                 println()
