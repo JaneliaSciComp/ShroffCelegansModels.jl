@@ -67,7 +67,8 @@ function select_dataset()
             return
         end
         @info "Launching show_average_annotations(...)" selection
-        show_average_annotations(avg_models, datasets[selection]; use_myuntwist=true);
+        fig = show_average_annotations(avg_models, datasets[selection]; use_myuntwist=true);
+        display(fig)
     end
     button = Makie.Button(fig[3,1], label = "Quit")
     on(button.clicks) do b
@@ -83,7 +84,12 @@ function select_dataset()
     return display(fig)
 end
 
-alias_cache_unix("/nearline/shroff")
+if gethostname() == "KITTISOPIKULM-2"
+    alias_cache("X")
+elseif gethostname() == "vm7249"
+    # shroff-data.int.janelia.org
+    alias_cache_unix("/nearline/shroff")
+end
 
 function main()
     while keep_running[]
