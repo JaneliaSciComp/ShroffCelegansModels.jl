@@ -4,6 +4,7 @@ using CoordinateTransformations
 using FFTW: fftfreq, fft, ifft
 
 include("../makie.jl")
+include("get_group_annotation_positions_over_time.jl")
 
 function show_average_annotations(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
@@ -71,6 +72,7 @@ function show_average_annotations(
     n_upsample = 2
     # dataset = first(datasets)
 
+    #=
     datasets_info = map(datasets) do dataset
         smts = ShroffCelegansModels.StraightenedModelTimeSeries(dataset)
         smts_nt = let _length = length(range(dataset.cell_key))
@@ -96,6 +98,9 @@ function show_average_annotations(
         annotation_dict = Dict(_annotation_text .=> values(annotation_dict))
         return (; dataset, smts_nt, mts_nt, annotation_dict)
     end
+    =#
+    datasets_info = get_datasets_info(datasets)
+
     common_annotations = intersect(map(datasets_info) do dataset_info
         collect(keys(dataset_info.annotation_dict))
     end...)
@@ -197,6 +202,7 @@ function show_average_annotations(
     =#
 
     
+    #=
     group_annotation_positions_over_time = map(datasets_info) do dataset_info
         dataset = dataset_info.dataset
         annotation_dict = dataset_info.annotation_dict
@@ -217,11 +223,8 @@ function show_average_annotations(
             Dict(keys(annotation_dict) .=> positions)
         end
     end # Vector{Vector{Dict{String, Point3{Float64}}}} # dataset, normalized time, name => position
-
-    seam_cell_positions_over_time = map(eachindex(r)) do j
-        _model = avg_models[j]
-        seam_cell_pts(_model, n_upsample)
-    end
+    =#
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache)
 
     # averaging
     _annotation_positions_over_time = map(eachindex(r)) do j
@@ -231,8 +234,12 @@ function show_average_annotations(
             end)
         end
     end
-    println("_annotation_positions_over_time")
-    typeof(_annotation_positions_over_time) |> println
+
+    seam_cell_positions_over_time = map(eachindex(r)) do j
+        _model = avg_models[j]
+        seam_cell_pts(_model, n_upsample)
+    end
+
     #_annotation_positions_over_time = [_annotation_positions_over_time; seam_cell_positions_over_time]
     _smooth_positions_over_time = Observable(_annotation_positions_over_time)
 
