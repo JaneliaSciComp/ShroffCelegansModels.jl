@@ -3,7 +3,7 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 
-function meshscatter_all(; nerve_cord = false)
+function meshscatter_all(; nerve_ring = false)
     fig = Figure(size = (1920, 1080))
     ax = LScene(fig[1,1:3]; show_axis = false)
     coordinates = values(my_annotation_position_cache)
@@ -12,7 +12,7 @@ function meshscatter_all(; nerve_cord = false)
     s = Vector{T}(undef, length(coordinates))
     _markersize = Observable(0.5)
     _keys = collect(keys(my_annotation_position_cache))
-    if nerve_cord
+    if nerve_ring
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v[end])
             if contains(_keys[i], "DCR6485_RPM1_NU")

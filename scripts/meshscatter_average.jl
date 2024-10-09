@@ -3,9 +3,9 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 
-function meshscatter_average(average_annotations_dict; nerve_cord = false, models = nothing)
+function meshscatter_average(average_annotations_dict; nerve_ring = false, models = nothing)
     fig = Figure(size = (1920, 1080))
-    ax = LScene(fig[1,1:3]; show_axis = false)
+    ax = LScene(fig[1,1:4]; show_axis = false)
     coordinates = values(average_annotations_dict)
     #T = MeshScatter{Tuple{Vector{Point{3, Float64}}}}
     T = Observable{Vector{Point{3, Float64}}}
@@ -20,11 +20,11 @@ function meshscatter_average(average_annotations_dict; nerve_cord = false, model
         get(colors_dict, annotation, RGBf(1,1,1))
     end
 
-    if nerve_cord
-        nerve_cord_data = average_annotations_dict["DCR6485_RPM1_NU"]
-        p = sortperm(nerve_cord_data.annotations)
-        nerve_cord_positions = Observable(nerve_cord_data.positions[end][p])
-        nerve_cord_line = lines!(nerve_cord_positions, color = :blue)
+    if nerve_ring
+        nerve_ring_data = average_annotations_dict["DCR6485_RPM1_NU"]
+        p = sortperm(nerve_ring_data.annotations)
+        nerve_ring_positions = Observable(nerve_ring_data.positions[end][p])
+        nerve_ring_line = lines!(nerve_ring_positions, color = :blue)
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v.positions[end])
             if contains(_keys[i], "DCR6485_RPM1_NU")
@@ -70,15 +70,20 @@ function meshscatter_average(average_annotations_dict; nerve_cord = false, model
     )
 
     time_points = axes(first(coordinates).positions, 1)
-    time_slider = Makie.Slider(fig[2,1:3], range = time_points, startvalue = 201)
+    time_slider = Makie.Slider(fig[2,1:4], range = time_points, startvalue = 201)
     #grid = GridLayout(tellwidth = false, tellheight = false, height = Fixed(5))
     xy_button = Button(fig; label = "XY", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     xz_button = Button(fig; label = "XZ", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     yz_button = Button(fig; label = "YZ", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
+    markersize_menu = Menu(fig, options = string.(0.5:0.1:4), default = "0.5",
+        cell_color_inactive_even = RGBf(0.5, 0.5, 0.5),
+        cell_color_inactive_odd = RGBf(0.5, 0.5, 0.5),
+    )
     #grid[1,1] = button
     fig[3,1] = xy_button
     fig[3,2] = xz_button
     fig[3,3] = yz_button
+    fig[3,4] = markersize_menu
     zoom!(ax.scene, 2)
     on(throttle(0.1, time_slider.value)) do t
         total_minutes = (t-1)/200*420
@@ -88,8 +93,8 @@ function meshscatter_average(average_annotations_dict; nerve_cord = false, model
         for (i, v) in enumerate(coordinates)
             s[i][] = v.positions[t]
         end
-        if nerve_cord
-            nerve_cord_positions[] = nerve_cord_data.positions[t][p]
+        if nerve_ring
+            nerve_ring_positions[] = nerve_ring_data.positions[t][p]
         end
         if !isnothing(models)
             seam_cells[] = swapyz_scale.(seam_cell_pts(models[t], 2))
@@ -106,6 +111,9 @@ function meshscatter_average(average_annotations_dict; nerve_cord = false, model
     on(yz_button.clicks) do _
         update_cam!(ax.scene, cc, 0, 0)
         scalebar[] = Point3f[[21, 190, -21], [21, 200, -21]]
+    end
+    on(markersize_menu.selection) do _
+        _markersize[] = parse(Float64, markersize_menu.selection[])
     end
     #=
     println("Press any key to continue:")
