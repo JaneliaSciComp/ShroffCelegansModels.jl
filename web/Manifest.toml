@@ -2,7 +2,7 @@
 
 julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "1aeaf80ae9a8fa12c0926b2a54c002dbe53a275d"
+project_hash = "d757a3cdf0190e611abaa2d064b49e0f11b470ce"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -192,6 +192,18 @@ deps = ["CodecZlib", "Dates", "FilePathsBase", "InlineStrings", "Mmap", "Parsers
 git-tree-sha1 = "6c834533dc1fabd820c1db03c839bf97e45a3fab"
 uuid = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 version = "0.10.14"
+
+[[deps.Cairo]]
+deps = ["Cairo_jll", "Colors", "Glib_jll", "Graphics", "Libdl", "Pango_jll"]
+git-tree-sha1 = "7b6ad8c35f4bc3bca8eb78127c8b99719506a5fb"
+uuid = "159f3aea-2a34-519c-b102-8c37f9878175"
+version = "1.1.0"
+
+[[deps.CairoMakie]]
+deps = ["CRC32c", "Cairo", "Cairo_jll", "Colors", "FileIO", "FreeType", "GeometryBasics", "LinearAlgebra", "Makie", "PrecompileTools"]
+git-tree-sha1 = "4f827b38d3d9ffe6e3b01fbcf866c625fa259ca5"
+uuid = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+version = "0.12.11"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
@@ -645,6 +657,12 @@ deps = ["Artifacts", "Gettext_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libic
 git-tree-sha1 = "7c82e6a6cd34e9d935e9aa4051b66c6ff3af59ba"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
 version = "2.80.2+0"
+
+[[deps.Graphics]]
+deps = ["Colors", "LinearAlgebra", "NaNMath"]
+git-tree-sha1 = "d61890399bc535850c4bf08e4e0d3a7ad0f21cbd"
+uuid = "a2bd30eb-e257-5431-a919-1863eab51364"
+version = "1.1.2"
 
 [[deps.Graphite2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1550,7 +1568,7 @@ uuid = "992d4aef-0814-514b-bc4d-f2e9a6c4116f"
 version = "1.0.3"
 
 [[deps.ShroffCelegansModels]]
-deps = ["BSplineKit", "CSV", "CircStats", "ColorSchemes", "Colors", "CoordinateTransformations", "DataFrames", "Dates", "FFTW", "FileIO", "FixedPointNumbers", "GLMakie", "GeometryBasics", "HDF5", "ImageContrastAdjustment", "ImageCore", "ImageFiltering", "IndirectArrays", "InteractiveUtils", "Interpolations", "JSON3", "LRUCache", "LinearAlgebra", "Makie", "MakieCore", "Missings", "Observables", "Pkg", "PrecompileTools", "Printf", "ProgressMeter", "QuadGK", "Rotations", "StaticArrays", "Statistics", "StatsBase", "ThinPlateSplines", "TiffImages", "UnicodePlots"]
+deps = ["BSplineKit", "CSV", "CircStats", "ColorSchemes", "Colors", "CoordinateTransformations", "DataFrames", "Dates", "FFTW", "FileIO", "FixedPointNumbers", "GeometryBasics", "HDF5", "ImageContrastAdjustment", "ImageCore", "ImageFiltering", "IndirectArrays", "InteractiveUtils", "Interpolations", "JSON3", "LRUCache", "LinearAlgebra", "Makie", "MakieCore", "Missings", "Observables", "Pkg", "PrecompileTools", "Printf", "ProgressMeter", "QuadGK", "Rotations", "StaticArrays", "Statistics", "StatsBase", "ThinPlateSplines", "TiffImages", "UnicodePlots"]
 path = ".."
 uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
 version = "1.0.0-DEV"

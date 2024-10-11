@@ -1,3 +1,9 @@
+using Printf
+using GeometryBasics
+using ProgressMeter
+using CSV
+using DataFrames
+
 include("get_group_annotation_positions_over_time.jl")
 
 function average_annotations(datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset})

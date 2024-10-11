@@ -24,7 +24,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         nerve_ring_data = average_annotations_dict["DCR6485_RPM1_NU"]
         p = sortperm(nerve_ring_data.annotations)
         nerve_ring_positions = Observable(nerve_ring_data.positions[end][p])
-        nerve_ring_line = lines!(nerve_ring_positions, color = :blue)
+        nerve_ring_line = lines!(nerve_ring_positions, color = :blue, linewidth = 2)
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v.positions[end])
             if contains(_keys[i], "DCR6485_RPM1_NU")
@@ -34,7 +34,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
                 end
                 meshscatter!(s[i], markersize=_markersize, color = colors, inspector_label = inspector_label)
             else
-                meshscatter!(s[i], markersize=_markersize, color = :grey, alpha = 0.5)
+                meshscatter!(s[i], markersize=_markersize, color = :grey, alpha = 0.1)
             end
         end
     else
