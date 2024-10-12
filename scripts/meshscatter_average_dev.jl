@@ -25,18 +25,21 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     # HPF Label
     label_offset = 8
     time_text = Observable("hpf = 14:00")
+    text!(-label_offset, 0, label_offset; text = time_text)
 
     # Scalebar
     scalebar_size_um = 10
     scalebar_y_offset = 180
     scalebar_y_offset_obs = Observable(180)
-    text!(-label_offset, 0, label_offset; text = time_text)
-    text!( label_offset, scalebar_y_offset_obs, -label_offset; text = "$scalebar_size_um μm")
+    scalebar_text = Observable("$scalebar_size_um μm")
     scalebar = Observable(Point3f[
         [label_offset+1, scalebar_y_offset,                    -label_offset-1],
         [label_offset+1, scalebar_y_offset + scalebar_size_um, -label_offset-1]
     ])
-
+    scalebar_label_position = lift(scalebar) do pos
+        first(pos) + Point3f(0,0,1)
+    end
+    text!( scalebar_label_position; text = scalebar_text)
     lines!(scalebar, color = :white, linewidth = 5)
 
     if nerve_ring
@@ -84,13 +87,14 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             [0,  6, 0], 
             [0,  7, 0], 
             [0,  8, 0], 
-            [0,  9, 0], 
         ]
+        # Horizontal offset between values
         scatter_legend_pts .*= Point3f(0, 20, 0)
+        # Vertical offset from worm
         scatter_legend_pts .+= Point3f(label_offset+3, 0, -label_offset-3)
         legend_colors = RGBf[
             RGBf(185,   0, 255),
-            RGBf(  0,   0, 255),
+            RGBf(  0, 255, 255),
             RGBf(255,   0,   0),
             RGBf(255,  99,  93),
             RGBf(  0,   0, 128),
@@ -98,7 +102,6 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             RGBf( 16, 185,   0),
             RGBf(  0, 128,   0),
             RGBf( 93, 255, 109),
-            RGBf(255, 255, 255)
         ]./255
         legend_text = String[
             "Neurons",
@@ -107,10 +110,9 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             "Intestine",
             "Nerve Ring",
             "Glial",
-            "Stem Cell",
+            "Seam Cell",
             "Other Hypodermal",
             "Pharyngeal",
-            "Miscellaneous"
         ]
         meshscatter!(
             scatter_legend_pts,
@@ -195,7 +197,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     on(xy_button.clicks) do _
         update_cam!(ax.scene, cc, π/2, 0)
         scalebar_y_offset_obs[] = 0
-        scalebar[] = Point3f[[label_offset+1, 0, -label_offset-1], [label_offset+1 - scalebar_size_um, 0, -label_offset-1]]
+        scalebar[] = Point3f[[label_offset+1, 0, -label_offset-1], [label_offset+1 - scalebar_size_um/2, 0, -label_offset-1]]
+        scalebar_text[] = "$(scalebar_size_um÷2) μm"
     end
     on(xz_button.clicks) do _
         update_cam!(ax.scene, cc, 0, π/2)
