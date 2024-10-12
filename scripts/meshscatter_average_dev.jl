@@ -3,6 +3,8 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 
+include("crop_video.jl")
+
 function meshscatter_average(average_annotations_dict; nerve_ring = false, models = nothing, session = nothing, xy_bounding_radius = -1)
     max_columns = 1
 
@@ -222,7 +224,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         vs = Record(fig, time_slider.range[]; update=false) do t
             set_close_to!(time_slider, t)
         end
-        vid[] = DOM.div(vs; id = "video_recording")
+        vid[] = DOM.div(crop_video(vs); id = "video_recording")
         xy_button.blockscene.visible[] = true
         xz_button.blockscene.visible[] = true
         yz_button.blockscene.visible[] = true
@@ -253,7 +255,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
                 set_close_to!(time_slider, 2L - t)
             end
         end
-        vid[] = DOM.div(vs; id = "video_recording")
+        vid[] = DOM.div(crop_video(vs); id = "video_recording")
         xy_button.blockscene.visible[] = true
         xz_button.blockscene.visible[] = true
         yz_button.blockscene.visible[] = true

@@ -1,3 +1,8 @@
+using VideoIO
+using ColorTypes
+using Makie: VideoStream
+using Base64
+
 function crop_bounds(img)
     d1 = sum(@view(img[51:end,51:end]), dims=2)
     d2 = sum(@view(img[51:end,51:end]), dims=1)
@@ -33,5 +38,21 @@ function crop_video(
         for i in 1:N
             write(writer, @view(read(vio)[bounds...]))
         end
+    end
+end
+
+function crop_video(vs::VideoStream)
+    # From https://github.com/MakieOrg/Makie.jl/blob/2acd423116b3c28b0d51762be2747d7ebb3eee84/src/recording.jl#L182C1-L193C1
+    # The MIT License (MIT) Copyright (c) 2018-2021: Simon Danisch, Julius Krumbiegel.
+    mktempdir() do dir
+        raw_path = save(joinpath(dir, "video.mp4"), vs)
+        path = joinpath(dir, "cropped_video.mp4")
+        crop_video(raw_path, path)
+
+        # <video> only supports infinite looping, so we loop forever even when a finite number is requested
+        loopoption = vs.options.loop ≥ 0 ? (;loop=true) : (;)
+        source = DOM.source(; src="data:video/x-m4v;base64,$(base64encode(open(read,path)))", type="video/mp4")
+        # TODO: use loop option
+        return DOM.video(source; autoplay=true, controls=true, loopoption...);
     end
 end
