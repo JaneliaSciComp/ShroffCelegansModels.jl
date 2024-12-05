@@ -21,6 +21,7 @@ using InteractiveUtils
 @time_imports include("../src/demo_averaging/load_straightened_annotations_over_time.jl")
 @time_imports include("../src/demo_averaging/get_cell_trajectory_dict.jl")
 @time_imports include("../src/demo_averaging/show_average_annotations.jl")
+@time_imports include("../src/demo_averaging/debug_annotation_ap_axis.jl")
 
 function alias_cache(drive_letter)
     if drive_letter == "X"

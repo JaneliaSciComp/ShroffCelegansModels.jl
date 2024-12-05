@@ -24,10 +24,13 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         get(colors_dict, annotation, RGBAf(0,0,0,0))
     end
 
+    # Font size
+    _fontsize = Observable(40)
+
     # HPF Label
     label_offset = 8
     time_text = Observable("hpf = 14:00")
-    text!(-label_offset, 0, label_offset; text = time_text)
+    text!(-label_offset, 0, label_offset; text = time_text, fontsize=_fontsize)
 
     # Scalebar
     scalebar_size_um = 10
@@ -39,18 +42,19 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         [label_offset+1, scalebar_y_offset + scalebar_size_um, -label_offset-1]
     ])
     scalebar_label_position = lift(scalebar) do pos
-        first(pos) + Point3f(0,0,1)
+        first(pos)
     end
-    text!( scalebar_label_position; text = scalebar_text)
+    text!( scalebar_label_position; text = scalebar_text, fontsize = _fontsize, align = (:left, :bottom))
     lines!(scalebar, color = :white, linewidth = 5)
+    alpha_obs = Observable(1.0)
 
     if nerve_ring
+        alpha_obs[] = 0.2
         _other_markersize = lift(x->x/2, _markersize)
         nerve_ring_data = average_annotations_dict["DCR6485_RPM1_NU"]
         p = sortperm(nerve_ring_data.annotations)
         nerve_ring_positions = Observable(nerve_ring_data.positions[end][p])
         nerve_ring_line = lines!(nerve_ring_positions, color = :blue, linewidth = 3)
-        other_alpha = Observable(0.2)
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v.positions[end])
             function inspector_label(self, idx, position)
@@ -58,16 +62,19 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             end
             if contains(_keys[i], "DCR6485_RPM1_NU")
                 colors = get_color.(v.annotations)
+                colors = map(colors) do color
+                    return RGBf(0,0,1)
+                end
                 meshscatter!(s[i], markersize=_markersize, color = colors, inspector_label = inspector_label)
             else
                 colors = map(get_color.(v.annotations)) do color
                     if color == RGBAf(0,0,0,0)
                         return color
                     else
-                        return RGBAf(0.5, 0.5, 0.5, 1)
+                        return RGBf(1, 1, 1)
                     end
                 end
-                meshscatter!(s[i], markersize=_other_markersize, color = colors, alpha = other_alpha, inspector_label = inspector_label)
+                meshscatter!(s[i], markersize=_other_markersize, color = colors, alpha = alpha_obs, inspector_label = inspector_label)
             end
         end
     else
@@ -77,7 +84,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             function inspector_label(self, idx, position)
                 return string(v.annotations[idx], position)
             end
-            meshscatter!(s[i], markersize=_markersize, color = colors, inspector_label = inspector_label)
+            meshscatter!(s[i], markersize=_markersize, color = colors, inspector_label = inspector_label, alpha = alpha_obs)
         end
         scatter_legend_pts = Point3f[
             [0,  0, 0], 
@@ -119,7 +126,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         meshscatter!(
             scatter_legend_pts,
             markersize = _markersize,
-            color = legend_colors
+            color = legend_colors,
+            alpha = alpha_obs
         )
         text!(
             scatter_legend_pts;
@@ -147,25 +155,41 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     )
 
     time_points = axes(first(coordinates).positions, 1)
+    controls_visible = Observable(true)
     time_slider = Makie.Slider(fig[2,1:max_columns], range = time_points, startvalue = 201)
     #grid = GridLayout(tellwidth = false, tellheight = false, height = Fixed(5))
     xy_button = Button(fig; label = "XY", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     xz_button = Button(fig; label = "XZ", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     yz_button = Button(fig; label = "YZ", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
+    markersize_label = Label(fig, text = "Marker Size")
     markersize_menu = Menu(fig, options = string.(0.5:0.1:4), default = "1.0",
         cell_color_inactive_even = RGBf(0.5, 0.5, 0.5),
         cell_color_inactive_odd = RGBf(0.5, 0.5, 0.5),
     )
     record_button = Button(fig; label = "Record", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     record_button2 = Button(fig; label = "Record Loop", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
+    fontsize_label = Label(fig, text = "Font Size")
+    fontsize_menu = Menu(fig, options = string.(20:60), default=string(_fontsize[]))
+    transparency_label = Label(fig, text = "Transparency")
+    transparency_slider = Makie.Slider(fig, range=0:0.01:1, startvalue = alpha_obs[])
     #grid[1,1] = button
     g = fig[3,1] = GridLayout()
     g[1,1] = xy_button
     g[1,2] = xz_button
     g[1,3] = yz_button
-    g[1,4] = markersize_menu
-    g[1,5] = record_button
-    g[1,6] = record_button2
+    g[1,4] = markersize_label
+    g[1,5] = markersize_menu
+    g[1,6] = fontsize_label
+    g[1,7] = fontsize_menu
+    g[1,8] = transparency_label
+    g[1,9] = transparency_slider
+    g[1,10] = record_button
+    g[1,11] = record_button2
+    for c in contents(g)
+        c.blockscene.visible = controls_visible
+    end
+    time_slider.blockscene.visible = controls_visible
+
     zoom!(ax.scene, 4)
     on(throttle(0.1, time_slider.value)) do t
         total_minutes = (t-1)/200*420
@@ -214,24 +238,12 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     on(record_button.clicks) do _
         # record(fig, "/var/www/shroff/test.mp4", time_slider.range[]; update=false) do t
         # VideoStream
-        xy_button.blockscene.visible[] = false
-        xz_button.blockscene.visible[] = false
-        yz_button.blockscene.visible[] = false
-        markersize_menu.blockscene.visible[] = false
-        record_button.blockscene.visible[] = false
-        record_button2.blockscene.visible[] = false
-        time_slider.blockscene.visible[] = false
+        controls_visible[] = false
         vs = Record(fig, time_slider.range[]; update=false) do t
             set_close_to!(time_slider, t)
         end
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
-        xy_button.blockscene.visible[] = true
-        xz_button.blockscene.visible[] = true
-        yz_button.blockscene.visible[] = true
-        markersize_menu.blockscene.visible[] = true
-        record_button.blockscene.visible[] = true
-        record_button2.blockscene.visible[] = true
-        time_slider.blockscene.visible[] = true
+        controls_visible[] = true
         if !isnothing(session)
             evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
         end
@@ -239,13 +251,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     on(record_button2.clicks) do _
         # record(fig, "/var/www/shroff/test.mp4", time_slider.range[]; update=false) do t
         # VideoStream
-        xy_button.blockscene.visible[] = false
-        xz_button.blockscene.visible[] = false
-        yz_button.blockscene.visible[] = false
-        markersize_menu.blockscene.visible[] = false
-        record_button.blockscene.visible[] = false
-        record_button2.blockscene.visible[] = false
-        time_slider.blockscene.visible[] = false
+        controls_visible[] = false
         L = time_slider.range[].stop
         _range = 1:2L
         vs = Record(fig, _range; update=false) do t
@@ -256,13 +262,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             end
         end
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
-        xy_button.blockscene.visible[] = true
-        xz_button.blockscene.visible[] = true
-        yz_button.blockscene.visible[] = true
-        markersize_menu.blockscene.visible[] = true
-        record_button.blockscene.visible[] = true
-        record_button2.blockscene.visible[] = true
-        time_slider.blockscene.visible[] = true
+        controls_visible[] = true
         if !isnothing(session)
             evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
         end
@@ -270,6 +270,12 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     on(markersize_menu.selection) do _
         _markersize[] = parse(Float64, markersize_menu.selection[])
+    end
+    on(fontsize_menu.selection) do _
+        _fontsize[] = parse(Int, fontsize_menu.selection[])
+    end
+    on(transparency_slider.value) do v
+        alpha_obs[] = v
     end
     #=
     println("Press any key to continue:")
