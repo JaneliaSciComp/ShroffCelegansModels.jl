@@ -1,5 +1,5 @@
-function get_avg_models()
-    r = LinRange(0.0, 1.0, 201)
+function get_avg_models(n=201)
+    r = LinRange(0.0, 1.0, n)
     first_avg_model = let models = models_at_nt(r[1])
         models = filter(!isnothing, models)
         models = identity.(models)

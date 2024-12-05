@@ -79,7 +79,9 @@ function nearest_central_plane(model::AbstractCelegansModel, pts::AbstractVector
 end
 
 function untwist_annotations(model::AbstractCelegansModel, pts::AbstractVector{<: Point})
-    t, ncp, pts_norm = nearest_central_pt(model, pts, [1.0, 1.5, 2.0, 2.5])
+    thresholds = [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.5, 1.5, 2.0, 2.5]
+    #thresholds = [1.0, 1.5, 1.5, 2.0, 2.5]
+    t, ncp, pts_norm = nearest_central_pt(model, pts, thresholds)
     ts1 = ShroffCelegansModels.transverse_spline(model, 1)
     right = ts1.(t)
 

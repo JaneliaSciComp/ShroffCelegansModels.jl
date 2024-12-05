@@ -65,7 +65,8 @@ function show_average_annotations(
     )
 
     _common_path = common_path(datasets)
-    Label(f[6, 1:3], _common_path)
+    _path = Observable(_common_path)
+    Label(f[6, 1:3], _path)
 
 
 
@@ -518,9 +519,10 @@ function show_average_annotations(
             nt = first(p)
             t = length(r) * nt + first(r)
             t_rounded = round(Int, t, RoundNearest)
-            return  "t=" * string(t) * ": " *
-                replace(datasets.path, _common_path => "")[2:end] *
+            _path[] = datasets.path *
                 "\\Decon_Reg_$(t_rounded)" 
+            return  "t=" * string(t) * ": " *
+                "Decon_Reg_$(t_rounded)" 
         end
         lines!(ax_2d_1, r, dsX; color = :gray, linestyle=linestyles[idx], inspector_label)
         dsY = Observable(zeros(size(r)))
@@ -691,7 +693,10 @@ function show_average_annotations(
         #annotation_menu.selection[] = annotation_menu.selection[]
     end
 
-    DataInspector(f)
+    DataInspector(ax_2d_1)
+    DataInspector(ax_2d_2)
+    DataInspector(ax_2d_3)
+    # DataInspector(f)
     # display(f)
 
     # y-axis
@@ -759,54 +764,7 @@ function smooth_polar(positions_over_time, σ)
     return positions_over_time
 end
 
-function smooth_polar_dct1(positions_over_time, σ_r, σ_θ, σ_z = 0)
-    G(σ,s) = exp.(-fftfreq(s,s).^2 ./2 ./ σ^2)
-    pfc = PolarFromCartesian()
-
-    N = length(positions_over_time)
-
-    # DCT Type I Mirroring
-    # positions_over_time = [positions_over_time; positions_over_time[end-1:-1:2]]
-
-    polar_coords = map(positions_over_time) do position
-        pfc(Point2(first(position), last(position)))
-    end
-    _r = (x -> x.r).(polar_coords)
-    _r = [_r; _r[end-1:-1:2]]
-    _θ = (x -> x.θ).(polar_coords)
-    _z = (x -> x[2]).(positions_over_time)
-    if σ_r > 0
-        _filter = G(σ_r, length(_r))
-        _r = abs.(ifft(fft(_r) .* _filter))
-    end
-    _r = @view _r[1:N]
-
-    _cs = exp.(_θ .* 1im)
-    _cs = [_cs; _cs[end-1:-1:2]]
-    if σ_θ > 0
-        _filter = G(σ_θ, length(_cs))
-        _cs = ifft(fft(_cs) .* _filter)
-    end
-    _θ = angle.(_cs)
-
-    _z = [_z; _z[end-1:-1:2]]
-    if σ_z > 0
-        lpz_filter = G(0.5, length(_z))
-        lp_z = real.(ifft(fft(_z) .* lpz_filter))
-        _filter = G(σ_z, length(_z))
-        _z = real.(ifft(fft(_z .- lp_z) .* _filter))
-        _z .+= lp_z
-    end
-    _z = @view _z[1:N]
-
-    cfp = CartesianFromPolar()
-    positions_over_time = map(_r, _z, _θ) do r, z, θ
-        _cartesian = cfp(Polar(r, θ))
-        Point3(_cartesian[1], z, _cartesian[2])
-    end
-    return positions_over_time
-    # return @view positions_over_time[1:N]
-end
+include("smooth_polar_dct1.jl")
 
 
 """

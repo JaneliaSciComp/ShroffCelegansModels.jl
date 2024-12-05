@@ -13,6 +13,7 @@ using ThinPlateSplines
 using CoordinateTransformations
 using FFTW
 using ProgressMeter
+using Printf
 
 include("demo_averaging/read_config_json.jl")
 include("demo_averaging/get_lattice.jl")
@@ -29,7 +30,7 @@ include("demo_averaging/load_straightened_annotations_over_time.jl")
 
 using ShroffCelegansModels.MIPAVIO: get_model_csv, get_integrated_annotations,
     get_straightened_lattice, get_straightened_lattice_xy_center,
-    mipav_df_to_points, mipav_df_to_points_dict
+    mipav_df_to_points, mipav_df_to_point_dict
 include("demo_averaging/get_cell_trajectory_dict.jl")
 include("demo_averaging/transform_annotations.jl")
 include("demo_averaging/plot_int_cells.jl")
