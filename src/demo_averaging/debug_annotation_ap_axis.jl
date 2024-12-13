@@ -7,6 +7,8 @@ function debug_annotation_ap_axis(
     second(x) = x[2]
 
     f = Figure(size = (1920, 1080))
+
+    title = Label(f[0, 1:2], dataset.path)
     
     title_twisted = Observable("Twisted")
     lscene = LScene(f[1:3,1])
@@ -25,18 +27,21 @@ function debug_annotation_ap_axis(
         title = selected_annotation_name,
         limits = ((0,200), nothing)
     )
+
+    cell_key_range = range(dataset.cell_key)
+
     ax_z = Axis(f[3,2],
-        xlabel = "Time (Normalized from Twitch to Hatch)",
+        xlabel = "Time (From Twitch to Hatch)",
         ylabel = "Z",
         title = "Z position of annotation",
-        limits = ((0.0,1.0), nothing)
+        limits = ((first(cell_key_range),last(cell_key_range)), nothing)
     )
 
-    N_timepoints = 200
-    r = LinRange(0.0, 1.0, N_timepoints + 1)
+    r = LinRange(0.0, 1.0, length(cell_key_range))
     sliders = SliderGrid(f[4, 1:2],
         (label="Time (Normalized)", range=r),
-        (label="Exp. Factor", range=1.0:0.01:4),
+        (label="Timepoint", range=cell_key_range),
+        (label="Exp. Factor", range=1.0:0.01:4)
     )
     slider_range = sliders.sliders[1].range[]
 
@@ -77,6 +82,7 @@ function debug_annotation_ap_axis(
 
     annotation_dict = get_cell_trajectory_dict(dataset; use_myuntwist)
 
+    #=
     model = avg_models[1]
     _mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale))
     _seam_cells = Observable(swapyz_scale.(seam_cell_pts(model, n_upsample)))
@@ -86,6 +92,7 @@ function debug_annotation_ap_axis(
     straight_mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(smodel; transform_points=swapyz_scale))
     straight_seam_cells = Observable(swapyz_scale.(seam_cell_pts(smodel, n_upsample)))
     straight_seam_cell_labels = Observable(straight_seam_cells[] .- Ref(Point3f(2,0,0)))
+    =#
 
     tmodel = mts_nt(0.0)
     twisted_mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(tmodel; transform_points=swapyz_scale))
@@ -146,7 +153,7 @@ function debug_annotation_ap_axis(
     # @info twisted_annotation_cells[]
     # _annotation_cells = Observable(annotation_positions(0.0))
 
-    expansion_factor = sliders.sliders[2].value
+    expansion_factor = sliders.sliders[3].value
 
     twisted_central_pts = swapyz_scale.(second(ShroffCelegansModels.nearest_central_pt(tmodel, swapyz_unscale.(twisted_annotation_cells[]), expansion_factor[])))
     twisted_central_pts = Observable(twisted_central_pts)
@@ -168,21 +175,28 @@ function debug_annotation_ap_axis(
     twisted_annotation_text = get_annotation_text(twisted_positions)
     twisted_annotation_text = Observable(twisted_annotation_text)
 
-    annotation_menu = Menu(f[6, 1:2], options = twisted_annotation_text)
+    # annotation_menu = Menu(f[6, 1:2], options = twisted_annotation_text)
+    annotation_menu = Menu(f[6, 1:2], options = values(dataset.cell_key.mapping))
 
-    n_ellipse_pts = length(transverse_splines(model))
+    n_ellipse_pts = length(transverse_splines(tmodel))
     colorscheme = :cyclic_wrwbw_40_90_c42_n256
     #shading = MakieCore.automatic
     color=colorschemes[colorscheme][1:256÷n_ellipse_pts:256]
     colorrange = (1,n_ellipse_pts)
 
-    _color = Observable(repeat(color, length(model)))
-    straight_color = Observable(repeat(color, length(smodel)))
     twisted_color = Observable(repeat(color, length(tmodel)))
 
     twisted_seam_cell_text = Observable(String.([tmodel.names[2:2:end]; tmodel.names[1:2:end]]))
 
-    twisted_mesh_plot = mesh!(ax_twisted, twisted_mesh; colorrange, color = twisted_color, transparency = true, alpha = 0.5)
+    twisted_mesh_plot = mesh!(
+        ax_twisted,
+        twisted_mesh;
+        colorrange,
+        color = twisted_color,
+        transparency = true,
+        alpha = 0.5,
+        inspectable = false
+    )
     connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
     lines!(ax_twisted, twisted_central_spline)
     scatter!(ax_twisted, twisted_central_pts)
@@ -222,8 +236,11 @@ function debug_annotation_ap_axis(
     lines!(ax_ratio, central_spline_arc_lengths, ratio)
     hlines!(ax_ratio, 1.0, linestyle = :dash)
 
-    on(throttle(0.1, sliders.sliders[1].value)) do value
-        idx = round(Int, value*N_timepoints + 1)
+    nt_obs = Observable(0.0) 
+
+    on(throttle(0.1, nt_obs)) do value
+        #idx = round(Int, value*200 + 1)
+        #=
         model = avg_models[idx]
         n_sections = length(interpolation_points(model.central_spline))
         _mesh[] = ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale)
@@ -241,6 +258,7 @@ function debug_annotation_ap_axis(
         straight_seam_cells[] = swapyz_scale.(seam_cell_pts(smodel, n_upsample))
         straight_seam_cell_labels[] = straight_seam_cells[] .- Ref(Point3f(2,0,0))
         straight_annotation_cells[] = straight_annotation_positions_over_time[idx]
+        =#
 
         tmodel = mts_nt(value)
         if !ismissing(tmodel)
@@ -264,9 +282,28 @@ function debug_annotation_ap_axis(
             #plot_distance(1)
             notify(annotation_menu.selection)
         end
+
     end
 
-    on(throttle(0.1, sliders.sliders[2].value)) do expansion_factor_value
+    on(sliders.sliders[1].value) do value
+        nt_obs[] = value
+        cell_key_tp = round(Int, value * (length(cell_key_range)-1)) + first(cell_key_range)
+        if sliders.sliders[3].value[] != cell_key_tp
+            set_close_to!(sliders.sliders[2], cell_key_tp)
+        end
+    end
+
+    on(sliders.sliders[2].value) do value
+        local f = first(cell_key_range)
+        local e = last(cell_key_range)
+        local nt = (value - f) / (e - f)
+        if !isapprox(sliders.sliders[1].value[], nt)
+            set_close_to!(sliders.sliders[1], nt)
+        end
+        @info "Timepoint slider" value
+    end
+
+    on(throttle(0.1, sliders.sliders[3].value)) do expansion_factor_value
         value = sliders.sliders[1].value[]
         tmodel = mts_nt(value)
         annotation_positions = twisted_annotation_positions(value)
@@ -299,7 +336,7 @@ function debug_annotation_ap_axis(
         distance_central_pts[] = central_pts
 
         max_r = ShroffCelegansModels.max_radius_function(tmodel)
-        expansion_factor_value = sliders.sliders[2].value[]
+        expansion_factor_value = sliders.sliders[3].value[]
         max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
 
         pt = twisted_annotation_cells[][idx]
@@ -307,6 +344,7 @@ function debug_annotation_ap_axis(
         #autolimits!(ax_distance)
         #ylims!(ax_distance, nothing)
         limits!(ax_distance, (0, 200), (0, maximum(distances[])))
+        limits!(ax_ratio, (0, 200), (0, maximum(ratio[])))
         selected_distance[] = norm(twisted_central_pts[][idx] - pt)
 
         selected_annotation_name[] = twisted_annotation_text[][idx]
@@ -322,6 +360,8 @@ function debug_annotation_ap_axis(
             if p == ms_annotation_cells
                 #println(twisted_annotation_text[][idx])
                 plot_distance(idx)
+            elseif p == z_lines
+                set_close_to!(sliders.sliders[2], cell_key_range[idx])
             end
         end
     end
@@ -329,7 +369,8 @@ function debug_annotation_ap_axis(
     z_positions = let idx=1
         Observable((x->x[idx][2]).(straight_annotation_positions_over_time))
     end
-    lines!(ax_z, r, z_positions)
+    z_lines = lines!(ax_z, cell_key_range, z_positions)
+    vlines!(ax_z, sliders.sliders[2].value, color = :red)
     DataInspector(ax_z)
 
     #common_annotations_text = collect(keys(annotation_dict))
@@ -344,7 +385,8 @@ function debug_annotation_ap_axis(
         if !isnothing(selected)
             idx_common = findfirst(==(selected), common_annotations_text)
             z_positions[] = (x->x[idx_common][2]).(straight_annotation_positions_over_time)
-            autolimits!(ax_z)
+            #autolimits!(ax_z)
+            ylims!(ax_z)
         end
     end
 
