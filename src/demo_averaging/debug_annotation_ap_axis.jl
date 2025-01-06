@@ -176,7 +176,9 @@ function debug_annotation_ap_axis(
     twisted_annotation_text = Observable(twisted_annotation_text)
 
     # annotation_menu = Menu(f[6, 1:2], options = twisted_annotation_text)
-    annotation_menu = Menu(f[6, 1:2], options = values(dataset.cell_key.mapping))
+    menu_options = sort!(collect(values(dataset.cell_key.mapping)))
+    annotation_menu = Menu(f[6, 1:2], options = menu_options)
+    initial_selected_idx = findfirst(==(first(menu_options)), twisted_annotation_text[])
 
     n_ellipse_pts = length(transverse_splines(tmodel))
     colorscheme = :cyclic_wrwbw_40_90_c42_n256
@@ -214,7 +216,7 @@ function debug_annotation_ap_axis(
     distance_central_pts = Observable(Point3f[])
     central_spline_arc_lengths = Observable(Float64[])
 
-    selected_annotation_idx = Observable(1)
+    selected_annotation_idx = Observable(initial_selected_idx)
     max_r = ShroffCelegansModels.max_radius_function(tmodel)
     Npts = length(tmodel)
     z = LinRange(0, 1, Npts)
@@ -349,9 +351,7 @@ function debug_annotation_ap_axis(
 
         selected_annotation_name[] = twisted_annotation_text[][idx]
     end
-    plot_distance(::Nothing) = plot_distance(1)
-
-    plot_distance(1)
+    plot_distance(::Nothing) = plot_distance(initial_selected_idx)
 
     on(events(f).mousebutton, priority=2) do event
         # print("Mouse clicked")
@@ -390,7 +390,6 @@ function debug_annotation_ap_axis(
         end
     end
 
-    # display(f)
-    print(typeof(straight_annotation_positions_over_time))
+    notify(annotation_menu.selection)
     f
 end
