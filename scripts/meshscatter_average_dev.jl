@@ -123,6 +123,9 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             "Other Hypodermal",
             "Pharyngeal",
         ]
+        legend_fontsize = lift(_fontsize) do fs
+            fs / 2
+        end
         meshscatter!(
             scatter_legend_pts,
             markersize = _markersize,
@@ -169,7 +172,10 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     record_button = Button(fig; label = "Record", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     record_button2 = Button(fig; label = "Record Loop", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     fontsize_label = Label(fig, text = "Font Size")
-    fontsize_menu = Menu(fig, options = string.(20:60), default=string(_fontsize[]))
+    fontsize_menu = Menu(fig, options = string.(1:60), default=string(_fontsize[]),
+        cell_color_inactive_even = RGBf(0.5, 0.5, 0.5),
+        cell_color_inactive_odd = RGBf(0.5, 0.5, 0.5),
+    )
     transparency_label = Label(fig, text = "Transparency")
     transparency_slider = Makie.Slider(fig, range=0:0.01:1, startvalue = alpha_obs[])
     #grid[1,1] = button
@@ -253,7 +259,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         # VideoStream
         controls_visible[] = false
         L = time_slider.range[].stop
-        _range = 1:2L
+        _range = 1:L
         vs = Record(fig, _range; update=false) do t
             if t <= L
                 set_close_to!(time_slider, t)
