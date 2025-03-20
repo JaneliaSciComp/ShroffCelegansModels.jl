@@ -40,7 +40,6 @@ retracked_datasets["RW10131_SLS268"] = ShroffCelegansModels.NormalizedDataset.([
     "/nearline/shroff/shrofflab/RW10131/Data/2024_SLS268/20240429/SLS268_RW10131_SLS6/Pos1/SPIMB/Reg_Sample/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10131/Data/2024_SLS268/20240507/Pos1/SPIMA/Reg_Sample/For_Tracking/RegB"
 ])
-#=
 retracked_datsets["RW10598"] = ShroffCelegansModels.NormalizedDataset.([
     "/nearline/shroff/shrofflab/RW10598/2023_Data/Tracking/20230718/RW10598_NU/Pos1/SPIMB/Reg_Sample/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10598/2023_Data/Tracking/20230718/RW10598_NU/Pos2/SPIMB/Reg_Sample/For_Tracking/RegB",
@@ -51,7 +50,6 @@ retracked_datasets["RW10896"] = ShroffCelegansModels.NormalizedDataset.([
     "/nearline/shroff/shrofflab/RW10896/Postwitching/2023_imaging/20231129/RW10896_NU/Pos2/SPIMB/Registered_Volumes/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10896/Postwitching/2023_imaging/20231129/RW10896_NU/Pos3/SPIMB/Registered_Volumes/For_Tracking/RegB"
 ])
-=#
 
 function web_debug_annotation_ap_axis(datasets = retracked_datasets)
     menu = DOM.div(
