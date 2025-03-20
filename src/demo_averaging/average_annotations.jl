@@ -29,6 +29,7 @@ function average_annotations(datasets::Vector{ShroffCelegansModels.Datasets.Norm
     return (; annotations, positions)
 end
 
+# average_annotations_dict = average_annotations(datasets)
 function average_annotations(datasets::Dict{String, Vector{ShroffCelegansModels.Datasets.NormalizedDataset}})
     average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k    
            average_annotations(datasets[k])
@@ -36,6 +37,7 @@ function average_annotations(datasets::Dict{String, Vector{ShroffCelegansModels.
     return average_annotations_dict
 end
 
+# save_average_annotations(average_annotations_dict; filename = "average_annotations.h5")
 function save_average_annotations(
     average_annotations_dict::Dict{String, @NamedTuple{annotations::Vector{String}, positions::Vector{Vector{Point{3, Float64}}}}};
     filename = "average_annotations.h5"

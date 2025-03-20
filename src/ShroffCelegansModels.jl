@@ -39,6 +39,7 @@ module ShroffCelegansModels
 	include("area.jl")
 
 	include("annotation_untwist.jl")
+	include("parse_worm_dataset_path.jl")
 
 	include("precompile.jl")
 
