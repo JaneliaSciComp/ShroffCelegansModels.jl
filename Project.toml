@@ -47,6 +47,7 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 [compat]
 BSplineKit = "0.19"
 CircStats = "1"
+Colors = "0.13"
 GLMakie = "0.10"
 ImageContrastAdjustment = "0.3"
 ImageCore = "0.10"
