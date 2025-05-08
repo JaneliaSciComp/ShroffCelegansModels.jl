@@ -10,6 +10,7 @@ module ShroffCelegansModels
 	using QuadGK
 	using LRUCache
 	using FFTW
+	using Dates
 	using PrecompileTools: @setup_workload, @compile_workload
 
 	include("datasets.jl")

@@ -224,3 +224,38 @@ function twisted_annotations(dataset::NormalizedDataset, timepoint::Int=1)
         return missing
     end
 end
+
+function distance_to_twisted_annotation(model::AbstractCelegansModel, pt::Point)
+    # Sample points along the central spline
+    cs = ShroffCelegansModels.central_spline(model)
+    dcs = Derivative(1)*cs
+    Npts = length(model)
+    z = LinRange(0, 1, Npts)
+    central_pts = cs.(z)
+    annotation_vecs = -(central_pts .- pt)
+    annotation_norms = norm.(annotation_vecs)
+    unit_annotation_vecs = annotation_vecs ./ annotation_norms
+
+    ts1 = ShroffCelegansModels.transverse_spline(model, 1)
+    right = ts1.(z)
+    right_vecs = right .- central_pts
+    right_norms = norm.(right_vecs)
+    unit_right_vecs = right_vecs ./ right_norms
+
+    # Compute the cross product between the right direction and the annotation direction
+    c = unit_right_vecs .× unit_annotation_vecs
+
+    central_spline_vecs = dcs.(z)
+    central_spline_norms = norm.(central_spline_vecs)
+    unit_central_spline_vecs = central_spline_vecs ./ central_spline_norms
+
+    # Compute the sign of the cross product and the derivative of the central spline
+    # This indicates whether the cross product is pointing 
+    s = sign.(unit_central_spline_vecs .⋅ c)
+
+    # by taking the arctangent of signed magnitude of the cross product
+    # with the dot product of the right direction and the annotation direction
+    angles = atan.(norm.(c) .*s, unit_right_vecs .⋅ unit_annotation_vecs)
+
+    return (; annotation_norms, angles, unit_annotation_vecs, unit_right_vecs, unit_central_spline_vecs, c, central_pts, right_vecs, right_norms)
+end

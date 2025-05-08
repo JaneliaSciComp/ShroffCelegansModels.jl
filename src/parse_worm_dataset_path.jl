@@ -1,3 +1,5 @@
+using Dates
+
 function parse_worm_dataset_path(s::String)
     date_pattern = r"\d{6}"
     position_pattern = r"Pos\d+"
@@ -163,5 +165,33 @@ function save_annotation_position_cache(
                 end
             end
         end
+    end
+end
+
+function save_annotation_position_cache_all_dated(datasets::Dict{String, Vector{Datasets.NormalizedDataset}}; clear = true)
+    # Clear caches
+    if clear
+        empty!(annotation_position_cache)
+        empty!(my_annotation_position_cache)
+        empty!(annotations_cache)
+    end
+
+    date_str = "$(Dates.today())"
+    date_str = replace(date_str, "-" => "_")
+    for (timepoints, expanded) in Iterators.product((:raw, 420), (true, false))
+        tp_str = string(timepoints)
+        if expanded
+            tp_str *= "_expanded"
+        end
+        cache_file = "embryos_$(tp_str)_$date_str.h5"
+        save_annotation_position_cache(
+            cache_file,
+            datasets,
+            my_annotation_position_cache;
+            num_timepoints = timepoints,
+            expand_annotations = expanded,
+            append_seam_cells = true
+        )
+        @info "Saved annotation position cache to $cache_file" timepoints expanded
     end
 end
