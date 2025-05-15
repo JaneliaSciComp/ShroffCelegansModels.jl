@@ -62,7 +62,7 @@ module Datasets
             ]
             row = 4
         end
-        mapping = Dict{Symbol,String}(Symbol(k) => v for (k,v) in zip(df[row:end,1], df[row:end,2]))
+        mapping = Dict{Symbol,String}(Symbol(k) => v for (k,v) in zip(df[row:end,1], df[row:end,2]) if !ismissing(k) && !ismissing(v))
         return CellKey(name, start, stop, mapping, outliers)
     end
     function Base.getproperty(ck::CellKey, s::Symbol)
