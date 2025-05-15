@@ -179,6 +179,10 @@ function debug_annotation_ap_axis(
     menu_options = sort!(collect(values(dataset.cell_key.mapping)))
     annotation_menu = Menu(f[6, 1:2], options = menu_options)
     initial_selected_idx = findfirst(==(first(menu_options)), twisted_annotation_text[])
+    if isnothing(initial_selected_idx)
+        @error "Could not locate first menu option in twisted_annotation_text" first(menu_options)
+        initial_selected_idx = 1
+    end
 
     n_ellipse_pts = length(transverse_splines(tmodel))
     colorscheme = :cyclic_wrwbw_40_90_c42_n256
@@ -329,7 +333,11 @@ function debug_annotation_ap_axis(
     function plot_distance(idx)
         selected_annotation_idx[] = idx
         #println(idx)
-        selected_twisted_annotation_cell[] = [twisted_annotation_cells[][selected_annotation_idx[]]]
+        try
+            selected_twisted_annotation_cell[] = [twisted_annotation_cells[][selected_annotation_idx[]]]
+        catch err
+            @error "Could not select twisted annotation cell" selection_annotation_idx[]
+        end
         cs = ShroffCelegansModels.central_spline(tmodel)
         Npts = length(tmodel)
         z = LinRange(0, 1, Npts)
@@ -384,9 +392,13 @@ function debug_annotation_ap_axis(
         #end
         if !isnothing(selected)
             idx_common = findfirst(==(selected), common_annotations_text)
-            z_positions[] = (x->x[idx_common][2]).(straight_annotation_positions_over_time)
-            #autolimits!(ax_z)
-            ylims!(ax_z)
+            try
+                z_positions[] = (x->x[idx_common][2]).(straight_annotation_positions_over_time)
+                #autolimits!(ax_z)
+                ylims!(ax_z)
+            catch err
+                @error "Could not get z_positions" err
+            end
         end
     end
 

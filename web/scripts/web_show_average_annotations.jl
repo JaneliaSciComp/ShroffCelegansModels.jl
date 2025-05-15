@@ -6,7 +6,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     global run_web_main::Bool = true
 end
 
-include("../../scripts/launch_show_average_annotations.jl")
+includet("../../scripts/launch_show_average_annotations.jl")
 
 function web_show_average_annotations(datasets = datasets)
     menu = DOM.div(

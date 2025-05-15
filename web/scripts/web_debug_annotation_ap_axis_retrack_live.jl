@@ -1,3 +1,4 @@
+using Revise
 using WGLMakie
 using Bonito
 
@@ -40,7 +41,7 @@ retracked_datasets["RW10131_SLS268"] = ShroffCelegansModels.NormalizedDataset.([
     "/nearline/shroff/shrofflab/RW10131/Data/2024_SLS268/20240429/SLS268_RW10131_SLS6/Pos1/SPIMB/Reg_Sample/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10131/Data/2024_SLS268/20240507/Pos1/SPIMA/Reg_Sample/For_Tracking/RegB"
 ])
-retracked_datsets["RW10598"] = ShroffCelegansModels.NormalizedDataset.([
+retracked_datasets["RW10598"] = ShroffCelegansModels.NormalizedDataset.([
     "/nearline/shroff/shrofflab/RW10598/2023_Data/Tracking/20230718/RW10598_NU/Pos1/SPIMB/Reg_Sample/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10598/2023_Data/Tracking/20230718/RW10598_NU/Pos2/SPIMB/Reg_Sample/For_Tracking/RegB",
     "/nearline/shroff/shrofflab/RW10598/2023_Data/Tracking/20230719/RW10598_NU/Pos4/SPIMB/Reg_Sample/For_Tracking/RegB"
@@ -75,7 +76,12 @@ function web_debug_annotation_ap_axis(datasets = retracked_datasets)
                 empty!(annotations_cache)
                 #empty!(annotation_position_cache)
                 #empty!(my_annotation_position_cache)
-                return debug_annotation_ap_axis(avg_models, datasets[k][i]; use_myuntwist=true);
+                try
+                    return debug_annotation_ap_axis(avg_models, datasets[k][i]; use_myuntwist=true);
+                catch err
+                    msg = sprint(showerror, err, catch_backtrace())
+                    return DOM.pre(msg)
+                end
             end)
         end
     end
