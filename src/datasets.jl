@@ -16,12 +16,11 @@ module Datasets
     function Dataset(path::String)
         path = abspath(path)
         isdir(path) || error("Dataset path, \"$path\", does not exist as a directory.")
-        cell_key_path = joinpath(dirname(path), CELL_KEY_FILE_NAME)
-        # isfile(cell_key_path) || error("Cell Key path, $cell_key_path, does not exist as a file.")
+        cell_key_path = joinpath(dirname(path), CELL_KEY_CSV_NAME)
         if isfile(cell_key_path)
             return _Dataset(path, cell_key_path)
         end
-        cell_key_path = joinpath(dirname(path), CELL_KEY_CSV_NAME)
+        cell_key_path = joinpath(dirname(path), CELL_KEY_FILE_NAME)
         return _Dataset(path, cell_key_path)
     end
     function _Dataset(path::String, cell_key_path::String)
@@ -50,8 +49,20 @@ module Datasets
         name = df[1,1]
         start = df[2,1] isa AbstractString ? parse(Int, df[2,1]) : df[2,1]
         stop = df[2,2] isa AbstractString ? parse(Int, df[2,2]) : df[2,2]
-        mapping = Dict{Symbol,String}(Symbol(k) => v for (k,v) in zip(df[4:end,1], df[4:end,2]))
-        outliers = Int[]
+        row = 3
+        if ismissing(df[3,1]) ||
+            ismissing(df[3,2]) ||
+            isa(df[3,1], Int) ||
+            isa(df[3,2], Int) ||
+            !isnothing(tryparse(Int, df[3,1])) &&
+            !isnothing(tryparse(Int, df[3,2]))
+            outliers = Int[
+                isa(x, AbstractString) ? parse(Int, x) : x
+                for x in df[3,:] if !ismissing(x)
+            ]
+            row = 4
+        end
+        mapping = Dict{Symbol,String}(Symbol(k) => v for (k,v) in zip(df[row:end,1], df[row:end,2]))
         return CellKey(name, start, stop, mapping, outliers)
     end
     function Base.getproperty(ck::CellKey, s::Symbol)
@@ -83,7 +94,11 @@ module Datasets
         return NormalizedDataset(ds.path, ds.cell_key)
     end
     function parse_cell_key_csv(path::AbstractString)
-        df = CSV.read(path, DataFrame, header=0)
-        return CellKey(df)
+        try
+            df = CSV.read(path, DataFrame, header=0)
+            return CellKey(df)
+        catch e
+            error("Error reading CSV file: $path")
+        end
     end
 end

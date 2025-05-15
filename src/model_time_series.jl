@@ -13,7 +13,7 @@ function (mts::ModelTimeSeries)(time_offset::Integer)
             if timepoint ∈ ds.cell_key.outliers
                 return missing
             elseif !isfile(lattice_filepath)
-                @warn("$filepath is not a file on disk and is not marked as an outlier.")
+                @warn("$lattice_filepath is not a file on disk and is not marked as an outlier.")
                 return missing
             else
                 return build_celegans_model(lattice_filepath)
