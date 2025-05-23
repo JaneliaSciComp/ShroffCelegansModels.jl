@@ -113,6 +113,7 @@ end
 function MakieCore.text!(ax, model::AbstractCelegansModel, f::Function = identity)
     pts = ShroffCelegansModels.interpolation_points(model)
     splines = transverse_splines(model)
+    # This probably swapped. 1 should be right, 17 should be left
     left_spline = splines[1]
     right_spline = splines[17]
     text!(ax, f.(left_spline.(pts)); text = ShroffCelegansModels.Types.names(model)[1:2:end])

@@ -3,7 +3,7 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 
-function meshscatter_all(; nerve_ring = false)
+function meshscatter_all(; nerve_cord = false)
     fig = Figure(size = (1920, 1080))
     ax = LScene(fig[1,1:3]; show_axis = false)
     coordinates = values(my_annotation_position_cache)
@@ -12,7 +12,7 @@ function meshscatter_all(; nerve_ring = false)
     s = Vector{T}(undef, length(coordinates))
     _markersize = Observable(0.5)
     _keys = collect(keys(my_annotation_position_cache))
-    if nerve_ring
+    if nerve_cord
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v[end])
             if contains(_keys[i], "DCR6485_RPM1_NU")
@@ -24,7 +24,7 @@ function meshscatter_all(; nerve_ring = false)
     else
         for (i, v) in enumerate(coordinates)
             s[i] = Observable(v[end])
-            meshscatter!(s[i], markersize=_markersize)
+            meshscatter!(s[i], markersize=_markersize, inspector_label = (plot,index,position) -> string(_keys[i], ": ", index, ", ", position))
         end
     end
     time_text = Observable("hpf = 14:00")
@@ -83,7 +83,8 @@ function meshscatter_all(; nerve_ring = false)
         end
     end
     =#
-    DOM.body(fig, style=Styles(CSS("background-color" => "black")))
+    DataInspector(ax)
+    return DOM.body(fig, style=Styles(CSS("background-color" => "black")))
 end
 #with_theme(meshscatter_all, theme_black())
 #set_theme!(theme_black())

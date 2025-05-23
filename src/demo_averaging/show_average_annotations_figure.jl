@@ -6,7 +6,130 @@ using FFTW: fftfreq, fft, ifft
 include("../makie.jl")
 include("get_group_annotation_positions_over_time.jl")
 
-function show_average_annotations(
+function yellow_figure(
+    avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
+    datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};
+    use_myuntwist = false,
+    cache = use_myuntwist ? my_annotation_position_cache : annotation_position_cache
+)
+    f = Figure(size = (1920, 1080))
+    model = avg_models[end]
+    n_upsample = 2
+
+    datasets_info = get_datasets_info(datasets)
+
+    common_annotations = intersect(map(datasets_info) do dataset_info
+        collect(keys(dataset_info.annotation_dict))
+    end...)
+
+    if length(datasets) == 1
+        N_timepoints = length(range(datasets[1].cell_key))
+    else
+        N_timepoints = 200
+    end
+    r = LinRange(0.0, 1.0, N_timepoints + 1)
+
+    n_ellipse_pts = length(transverse_splines(model))
+    colorscheme = :cyclic_wrwbw_40_90_c42_n256
+    #shading = MakieCore.automatic
+    color=colorschemes[colorscheme][1:256÷n_ellipse_pts:256]
+    colorrange = (1,n_ellipse_pts)
+
+    _color = Observable(repeat(color, length(model)))
+
+    
+    title = Observable("Annotations Averaged Post-Warp")
+    #ax = Axis3(f[1:3,1], aspect = (1, 10, 1); title)
+    ax = LScene(f[1:3,1], show_axis = false)
+    slider = Slider(f[4,1], range = r)
+    _mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale))
+    _seam_cells = Observable(swapyz_scale.(seam_cell_pts(model, n_upsample)))
+    _seam_cell_labels = Observable(_seam_cells[] .- Ref(Point3f(2,0,0)))
+
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache)
+
+    _annotation_positions_over_time = map(eachindex(group_annotation_positions_over_time[1])) do j
+        map(common_annotations) do name
+            mean(map(eachindex(group_annotation_positions_over_time)) do i
+                group_annotation_positions_over_time[i][j][name]
+            end)
+        end
+    end
+
+    seam_cell_text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]]
+    
+    _annotation_cells = Observable(_annotation_positions_over_time[end])
+
+    seam_cell_positions_over_time = map(eachindex(avg_models)) do j
+        _model = avg_models[j]
+        seam_cell_pts(_model, n_upsample)
+    end
+
+    scatter_color = use_myuntwist ? :gold : :blue
+    mesh!(ax, _mesh; colorrange, color = _color, transparency = true, alpha = 0.3, inspectable = false)
+    meshscatter!(ax, _seam_cells; markersize = 1.0, color = :gray, alpha = 1, inspectable = false)
+    meshscatter!(ax, _annotation_cells; markersize = 1.0, color = scatter_color, alpha = 1, inspectable = false)
+    text!(ax, _seam_cell_labels; text = seam_cell_text, align = (:right, :bottom))
+
+    # HPF Label
+    label_offset = 20 
+    time_text = Observable("hpf = 14:00")
+    text!(-label_offset, 0, label_offset; text = time_text, visible=false)
+
+    # Scalebar
+    scalebar_size_um = 10
+    scalebar_y_offset = 180
+    scalebar_y_offset_obs = Observable(180)
+    scalebar_text = Observable("$scalebar_size_um μm")
+    scalebar = Observable(Point3f[
+        [label_offset+1, scalebar_y_offset,                    -label_offset-1],
+        [label_offset+1, scalebar_y_offset + scalebar_size_um, -label_offset-1]
+    ])
+    scalebar_label_position = lift(scalebar) do pos
+        first(pos) + Point3f(0,0,1)
+    end
+    text!( scalebar_label_position; text = scalebar_text, visible=false)
+    lines!(scalebar, color = :white, linewidth = 5, visible=false)
+
+    on(slider.value) do value
+        if length(datasets) == 1
+            total_minutes = value*N_timepoints*5
+            hours = round(Int, total_minutes/60, RoundDown)
+            minutes = round(Int, mod(total_minutes, 60), RoundDown)
+            time_text[] = "t = $hours:$(@sprintf("%02d", minutes))"
+        else
+            total_minutes = value*420
+            hours = 7 + round(Int, total_minutes/60, RoundDown)
+            minutes = round(Int, mod(total_minutes, 60), RoundDown)
+            time_text[] = "hpf = $hours:$(@sprintf("%02d", minutes))"
+        end
+
+        avg_models_idx = round(Int, value*(length(avg_models)-1) + 1)
+        model = avg_models[avg_models_idx]
+        n_sections = length(interpolation_points(model.central_spline))
+        _mesh[] = ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale)
+        _color[] = repeat(color, length(model))
+        # title[] = "Average over $config_path\n$(dataset.path), t = $value; number of cross sections: $n_sections"
+        _seam_cells[] = swapyz_scale.(seam_cell_pts(model, n_upsample))
+        _seam_cell_labels[] = _seam_cells[] .- Ref(Point3f(2,0,0))
+        idx = round(Int, value*N_timepoints + 1)
+        _annotation_cells[] = _annotation_positions_over_time[idx]
+    end
+
+
+    return f
+end
+function record_yellow_figure(movieFileName, args...; fig = yellow_figure(args...; kwargs...), kwargs...)
+    slider = fig.content[2]
+    slider.blockscene.visible = false
+
+    record(fig, movieFileName, slider.range[]; framerate = 12, update=false) do i
+        set_close_to!(slider, i)
+    end
+    slider.blockscene.visible = true
+end
+
+function show_average_annotations_figure(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
     datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};
     use_myuntwist = false,
@@ -712,7 +835,7 @@ function show_average_annotations(
     f
 end
 
-function record_show_average_annotations(movieFileName, avg_models, datasets, selection)
+function record_show_average_annotations_figure(movieFileName, avg_models, datasets, selection)
     f = show_average_annotations(avg_models, datasets; use_myuntwist=true)
     sg = f.content[6]
     f.content[10].selection[] = selection
