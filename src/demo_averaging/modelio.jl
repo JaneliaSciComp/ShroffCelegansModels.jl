@@ -2,7 +2,7 @@ using HDF5
 using Printf
 using BSplineKit: SplineInterpolation
 using GeometryBasics: Point3f, Point3
-using GLMakie
+using Makie
 
 function save_celegans_model(
     parent::Union{HDF5.File, HDF5.Group},

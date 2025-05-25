@@ -1,11 +1,13 @@
 using Dates
+using Printf
+using HDF5
 
 avg_models_filename = "celegans_avg_models_" * Dates.format(now(), "yyyy_mm_dd") * ".h5"
 
-function save_avg_models(avg_models_filename = avg_models_filename, avg_models = avg_models)
+function save_avg_models(avg_models_filename = avg_models_filename, avg_models = avg_models, offset = 0)
     h5open(avg_models_filename, "w") do h5f
         for (i, m) in pairs(avg_models)
-            save_celegans_model(h5f, @sprintf("avg_model_%03d", i), m)
+            save_celegans_model(h5f, @sprintf("avg_model_%03d", i + offset), m)
         end
     end
 end
