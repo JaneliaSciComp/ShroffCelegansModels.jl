@@ -99,7 +99,8 @@ function average(models::Vector{<: AbstractCelegansModel}, weights::AbstractWeig
     # return avg_z_position ./ avg_z_position[end]
 
     # TODO: Change add R names back
-    model_names = vec(permutedims([[common_names...] [common_names...]], (2,1)))
+    right_common_names = replace.(common_names, 'L' => 'R')
+    model_names = vec(permutedims([[common_names...] [right_common_names...]], (2,1)))
     return CelegansModel(avg_transverse_splines, avg_central_spline, model_names)
 
     # return avg_z_position, t_positions, avg_transverse_splines

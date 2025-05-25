@@ -65,7 +65,8 @@ function load_annotations_cache(annotations_cache = annotations_cache)
     function _descend(d::HDF5.Dataset)
         _name = HDF5.name(d)
         #println(_name)
-        _paths = splitpath(_name)
+        #_paths = splitpath(_name)
+        _paths = split(_name, "/")
         popfirst!(_paths)
 
         k2 = pop!(_paths)
@@ -76,8 +77,9 @@ function load_annotations_cache(annotations_cache = annotations_cache)
         try
             P = parent(parent(d))
         catch err
-            println(d)
-            throw(err)
+            # println(d)
+            @warn "Could not load $d" err
+            #throw(err)
         end
 
         while isnothing(idx)
@@ -145,7 +147,7 @@ function load_annotation_cache()
         end
         cache[idx] = pts
     end
-    h5open("my_annotation_position_cache.h5", "r") do h5f
+    h5open(joinpath(@__DIR__, "..", "..", "my_annotation_position_cache.h5"), "r") do h5f
         _descend(h5f)
     end
 end

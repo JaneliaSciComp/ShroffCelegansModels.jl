@@ -21,6 +21,7 @@ using InteractiveUtils
 @time_imports include("../src/demo_averaging/load_straightened_annotations_over_time.jl")
 @time_imports include("../src/demo_averaging/get_cell_trajectory_dict.jl")
 @time_imports include("../src/demo_averaging/show_average_annotations.jl")
+@time_imports include("../src/demo_averaging/debug_annotation_ap_axis.jl")
 
 function alias_cache(drive_letter)
     if drive_letter == "X"
@@ -33,6 +34,21 @@ function alias_cache(drive_letter)
     for (k,v) in annotations_cache
         a, b, c = k
         a = replace(a, "X:\\" => "$(drive_letter):\\")
+        k2 = (a,b,c)
+        annotations_cache[k2] = v
+    end
+end
+
+function alias_cache_unix(prefix)
+    for (k,v) in my_annotation_position_cache
+        k2 = replace(k, raw"X:\\" => "$(prefix)")
+        k2 = replace(k2, "\\" => "/")
+        my_annotation_position_cache[k2] = v
+    end
+    for (k,v) in annotations_cache
+        a, b, c = k
+        a = replace(a, raw"X:\\" => "$(prefix)")
+        a = replace(a, "\\" => "/")
         k2 = (a,b,c)
         annotations_cache[k2] = v
     end
@@ -52,32 +68,46 @@ function select_dataset()
             return
         end
         @info "Launching show_average_annotations(...)" selection
-        show_average_annotations(avg_models, datasets[selection]; use_myuntwist=true);
+        fig = show_average_annotations(avg_models, datasets[selection]; use_myuntwist=true);
+        display(fig)
     end
     button = Makie.Button(fig[3,1], label = "Quit")
     on(button.clicks) do b
         @info "Qutting..."
         global keep_running
         keep_running[] = false
-        GLMakie.closeall()
+        if @isdefined(GLMakie)
+            GLMakie.closeall()
+        end
         return nothing
     end
     @info "Displaying menu."
     return display(fig)
 end
 
-alias_cache("X")
-
-while keep_running[]
-    ds = select_dataset()
-    if !isnothing(ds)
-        wait(ds)
-    end
+if gethostname() == "KITTISOPIKULM-2"
+    alias_cache("X")
+elseif gethostname() == "vm7249"
+    # shroff-data.int.janelia.org
+    alias_cache_unix("/nearline/shroff")
 end
 
-println()
-@info "Press any key to quit"
-readline()
+function main()
+    while keep_running[]
+        ds = select_dataset()
+        if !isnothing(ds)
+            wait(ds)
+        end
+    end
+
+    println()
+    @info "Press any key to quit"
+    readline()
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end
 
 #@info "Launching show_average_annotations(...)"
 #show_average_annotations(avg_models, datasets["RW10742"]; use_myuntwist=true);
