@@ -10,6 +10,7 @@ module ShroffCelegansModels
 	using QuadGK
 	using LRUCache
 	using FFTW
+	using Dates
 	using PrecompileTools: @setup_workload, @compile_workload
 
 	include("datasets.jl")
@@ -39,6 +40,7 @@ module ShroffCelegansModels
 	include("area.jl")
 
 	include("annotation_untwist.jl")
+	include("parse_worm_dataset_path.jl")
 
 	include("precompile.jl")
 
