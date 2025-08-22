@@ -28,7 +28,7 @@ function web_debug_annotation_ap_axis(datasets = datasets)
     route!(server, "/" => App(menu))
     for k in keys(datasets)
         for i in keys(datasets[k])
-            route!(server, "/$k/$i" => App(; title="$k[$i]: Shroff C. elegans debug annotation AP axis") do
+            route!(server, "/$k/$i" => App(; title="$k[$i]: Shroff C. elegans fix annotation AP axis") do
                 return fix_annotation_ap_axis(avg_models, datasets[k][i]; use_myuntwist=true);
             end)
         end

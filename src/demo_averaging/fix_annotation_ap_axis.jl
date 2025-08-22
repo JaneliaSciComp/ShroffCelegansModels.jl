@@ -731,3 +731,71 @@ function shutdown_server()
     JSON3.write(s, Dict(:shutdown => true))
     close(s)
 end
+
+
+function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
+    # changes = Dict{String,Pair{Vector{Point3{Float64}},Vector{Point3{Float64}}}}()
+    changes = Dict{String,Pair{Point3{Float64},Point3{Float64}}}()
+
+    h5open(filepath, "r") do h5f
+        function _descend(p::Union{HDF5.File,HDF5.Group})
+            for k in keys(p)
+                _descend(p[k])
+            end
+        end
+        function _descend(d::HDF5.Dataset)
+            _name = HDF5.name(d)
+            # @info "Processing dataset" _name d[]
+            _paths = splitpath(_name)
+            popfirst!(_paths)
+            idx = tryparse(Int, _paths[end-2])
+            if idx === nothing
+                idx = parse(Int, _paths[end-3])
+            end
+            # @info "Paths after popfirst" idx _paths[end-3:end]
+
+            #idx = pop!(_paths)
+            #idx = parse(Int, idx)
+
+            # TODO: check if _paths[1] is nearline or a Windows UNC
+            #_paths[1] = _paths[1] * ":\\"
+            # _path = join(_paths, '/')
+            _path = join([_paths[1] * ":", _paths[2:end]...], '\\')
+
+            if _paths[end] != "new_position"
+                # @info "Skipping dataset" _path "not a new_position dataset"
+                return
+            end
+
+            _old_position_path = join([_paths[1:end-1]..., "original_position"], '/')
+            old_positions = h5f[_old_position_path][]
+            old_pts = Point3{Float64}.(eachcol(old_positions))
+
+            data = d[]
+            pts = Point3{Float64}.(eachcol(data))
+            @debug "Got points" pts
+            #println(_path)
+            #println(HDF5.name(d))
+            #=
+            cache = get!(my_annotation_position_cache, _path) do
+                P = parent(d)
+                N = count(keys(P)) do k
+                    isa(P[k], HDF5.Dataset)
+                end
+                Vector{Vector{Point3{Float64}}}(undef, N)
+            end
+            cache[idx] = pts
+            =#
+            old_pt = first(old_pts)
+            new_pt = last(pts)
+            # Ignore changes if the old and new points are the same
+            if norm(new_pt - old_pt) < 1
+                @info "Ignoring change for $_path, old and new points are the same: $(old_pt) => $(new_pt)"
+                return
+            end
+            changes[_path] = old_pt => new_pt
+        end
+        _descend(h5f)
+    end
+    return changes
+end
