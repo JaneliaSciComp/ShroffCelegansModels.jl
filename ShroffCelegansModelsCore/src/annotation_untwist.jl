@@ -13,13 +13,13 @@ Find the nearest central point on the model to each annotation point.
 """
 function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0)
     # Sample points along the central spline
-    cs = ShroffCelegansModels.central_spline(model)
+    cs = ShroffCelegansModelsCore.central_spline(model)
     Npts = length(model)
     z = LinRange(0, 1, Npts)
     central_pts = cs.(z)
 
     # For each sampled point calculate the maximum radius of the cross section
-    max_r_func = ShroffCelegansModels.max_radius_function(model)
+    max_r_func = ShroffCelegansModelsCore.max_radius_function(model)
     radius = max_r_func.(z)
 
     # For each annotation point, find the nearest central point
@@ -60,7 +60,7 @@ function get_central_point_parameters(
     pts::AbstractVector{<: Point},
     central_spline_voxel_distances::AbstractVector{<: Real}
 )
-    cs = ShroffCelegansModels.central_spline(model)
+    cs = ShroffCelegansModelsCore.central_spline(model)
     Npts = length(model)
     z = LinRange(0, 1, Npts)
     central_pts = cs.(z)
@@ -86,7 +86,7 @@ function max_radius_function(model)
 end
 
 function nearest_central_plane(model::AbstractCelegansModel, pts::AbstractVector{<: Point})
-    cs = ShroffCelegansModels.central_spline(model)
+    cs = ShroffCelegansModelsCore.central_spline(model)
     dcs = Derivative(1)*cs
 
     Npts = length(model)
@@ -94,7 +94,7 @@ function nearest_central_plane(model::AbstractCelegansModel, pts::AbstractVector
     central_pts = cs.(r)
 
 
-    ts1 = ShroffCelegansModels.transverse_spline(model, 1)
+    ts1 = ShroffCelegansModelsCore.transverse_spline(model, 1)
     right = ts1.(r)
     right_vec = right .- ncp
     right_norm = norm.(right_vec)
@@ -133,14 +133,14 @@ Untwist the annotations by computing their position relative to the central spli
 # Example
 ```julia
 using ShroffCelegansModels
-using ShroffCelegansModels.MIPAVIO
+using ShroffCelegansModelsCore.MIPAVIO
 
-dataset = ShroffCelegansModels.NormalizedDataset("X:/shrofflab/OD1599_NU/120619_Pos2/Decon_reg/RegB")
-mts = ShroffCelegansModels.ModelTimeSeries(dataset)
+dataset = ShroffCelegansModelsCore.NormalizedDataset("X:/shrofflab/OD1599_NU/120619_Pos2/Decon_reg/RegB")
+mts = ShroffCelegansModelsCore.ModelTimeSeries(dataset)
 model = mts(1)
 df = MIPAVIO.get_integrated_annotations(dataset, 1)
 pts = MIPAVIO.mipav_df_to_points(df)
-ShroffCelegansModels.untwist_annotations(model, pts)
+ShroffCelegansModelsCore.untwist_annotations(model, pts)
 ```
 
 # Notes
@@ -174,12 +174,12 @@ function untwist_annotations(
 
     # Objective: Compute the angle between the right direction and the point
     # The first transverse spline is used to determine which direction is the right side
-    ts1 = ShroffCelegansModels.transverse_spline(model, 1)
+    ts1 = ShroffCelegansModelsCore.transverse_spline(model, 1)
     right = ts1.(t)
 
     # Obtain the central spline and its derivative
     # The derivative should point along the spline
-    cs = ShroffCelegansModels.central_spline(model)
+    cs = ShroffCelegansModelsCore.central_spline(model)
     dcs = Derivative(1)*cs
 
     # Obtain the vector from the nearest central point to the annotation
@@ -229,6 +229,14 @@ function untwist_annotation(
     return only(untwist_annotations(model, pts, central_spline_voxel_distances))
 end
 
+function untwist_annotation(
+    model::AbstractCelegansModel,
+    pt::AbstractArray,
+)
+    pt = Point3(pt)
+    return untwist_annotation(model, pt, central_spline_voxel_distance)
+end
+
 """
     untwist_annotations(dataset::NormalizedDataset, timepoint::Int=1)
 
@@ -245,9 +253,9 @@ Untwist the annotations at a specific timepoint in the dataset.
 ```julia
 using ShroffCelegansModels
 
-dataset = ShroffCelegansModels.NormalizedDataset("X:/shrofflab/OD1599_NU/120619_Pos2/Decon_reg/RegB")
+dataset = ShroffCelegansModelsCore.NormalizedDataset("X:/shrofflab/OD1599_NU/120619_Pos2/Decon_reg/RegB")
 # Obtain the untwisted annotations for the C3 cell at timepoint 71
-c3_pt = ShroffCelegansModels.untwist_annotations(dataset, 71)["C3"]
+c3_pt = ShroffCelegansModelsCore.untwist_annotations(dataset, 71)["C3"]
 ```
 """
 function untwist_annotations(dataset::NormalizedDataset, timepoint::Int=1)
@@ -273,7 +281,7 @@ end
 
 function distance_to_twisted_annotation(model::AbstractCelegansModel, pt::Point)
     # Sample points along the central spline
-    cs = ShroffCelegansModels.central_spline(model)
+    cs = ShroffCelegansModelsCore.central_spline(model)
     dcs = Derivative(1)*cs
     Npts = length(model)
     z = LinRange(0, 1, Npts)
@@ -282,7 +290,7 @@ function distance_to_twisted_annotation(model::AbstractCelegansModel, pt::Point)
     annotation_norms = norm.(annotation_vecs)
     unit_annotation_vecs = annotation_vecs ./ annotation_norms
 
-    ts1 = ShroffCelegansModels.transverse_spline(model, 1)
+    ts1 = ShroffCelegansModelsCore.transverse_spline(model, 1)
     right = ts1.(z)
     right_vecs = right .- central_pts
     right_norms = norm.(right_vecs)

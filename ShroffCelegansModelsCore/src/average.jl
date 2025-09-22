@@ -7,7 +7,7 @@ const psuedo_seam_cells = ("a0L", "H0L", "H1L", "H2L", "V1L", "V2L", "V3L", "V4L
 function average(models::Vector{<: AbstractCelegansModel}, weights::AbstractWeights = uweights(length(models)); n_upsample::Int = 0)
     _names = map(models) do model
         #parent(model).names[1:2:end]
-        ShroffCelegansModels.Types.names(model)[1:2:end]
+        ShroffCelegansModelsCore.Types.names(model)[1:2:end]
     end
     
     common_names = intersect(_names..., psuedo_seam_cells)
