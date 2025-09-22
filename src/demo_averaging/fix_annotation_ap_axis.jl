@@ -760,7 +760,7 @@ function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..",
             # TODO: check if _paths[1] is nearline or a Windows UNC
             #_paths[1] = _paths[1] * ":\\"
             # _path = join(_paths, '/')
-            _path = join([_paths[1] * ":", _paths[2:end]...], '\\')
+            _path = join([_paths[1] * ":", _paths[3:end]...], '\\')
 
             if _paths[end] != "new_position"
                 # @info "Skipping dataset" _path "not a new_position dataset"
@@ -793,9 +793,66 @@ function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..",
                 @info "Ignoring change for $_path, old and new points are the same: $(old_pt) => $(new_pt)"
                 return
             end
+            _path = replace(_path, "nearline" => "X")
             changes[_path] = old_pt => new_pt
         end
         _descend(h5f)
     end
     return changes
+end
+
+"""
+    update_annotations_cache(annotations_cache, annotations_changes)
+
+Update the `annotations_cache` with the changes in `annotations_changes`.
+
+Parameters
+----------
+- `annotation_cache`: The current cache of annotation positions.
+    Usually ShroffCelegansModels.annotations_cache.
+- `annotations_changes`: The changes to be applied to the annotation cache.
+    Usually from `load_annotation_changes_cache`.
+
+Returns
+----------
+- The updated `annotations_cache`.
+"""
+function update_annotations_cache(
+    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
+    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}}
+)
+    annotations_cache_keys = keys(annotations_cache)
+    key_map_dict = Dict(first.(annotations_cache_keys) .=> annotations_cache_keys)
+    for (change_key, (old_pt, new_pt)) in annotations_changes
+        change_key_parts = splitpath(change_key)
+        timepoint = tryparse(Int, change_key_parts[end-3])
+        if isnothing(timepoint)
+            # Case when annotation name does not contain a slash
+            timepoint = parse(Int, change_key_parts[end-2])
+            dataset_path = joinpath(change_key_parts[begin:end-3])
+            annotation_name = change_key_parts[end-1]
+        else
+            # Case when annotation name contains a slash
+            # timepoint is change_key_parts[end-3]
+            dataset_path = joinpath(change_key_parts[begin:end-4])
+            annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
+        end
+        # Could error if dataset_path is not in key_map_dict
+        annotations_cache_key = key_map_dict[dataset_path]
+        dataset = ShroffCelegansModels.Dataset(dataset_path)
+        annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
+        # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
+        timepoint = timepoint - dataset.cell_key.start + 1
+        if ismissing(annotations_cache[annotations_cache_key][timepoint])
+            @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
+            annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
+            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(old_pt)
+        end
+        # Check old_pt matches the cached point
+        if annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] != swapyz_unscale(old_pt)
+            @warn "Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt))"
+        end
+        annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+    end
+    return annotations_cache
 end

@@ -69,10 +69,12 @@ nothing_count = map(r) do nt
 end
 =#
 
-
+# Straightened annotations
 const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
+# Warped annotations, with MIPAV straightening
 const annotation_position_cache = Dict{String, Any}()
 #const my_annotation_position_cache = Dict{String, Any}()
+# Warped annotations, with Mark's straightening
 const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
 
 # TODO: Move from demo_averaging:408
