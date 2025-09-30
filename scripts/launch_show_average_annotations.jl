@@ -1,12 +1,12 @@
 using Pkg
 #using Revise
 cd(dirname(@__DIR__))
-Pkg.activate(dirname(@__DIR__))
-using JSON3
+#Pkg.activate(dirname(@__DIR__))
 using ShroffCelegansModels
-using Printf
-using HDF5
-using ThinPlateSplines # tps_solve
+using ShroffCelegansModels.JSON3
+using ShroffCelegansModels.Printf
+using ShroffCelegansModels.HDF5
+using ShroffCelegansModels.ThinPlateSplines # tps_solve
 using InteractiveUtils
 
 @info "Loading demo_averaging.jl..."

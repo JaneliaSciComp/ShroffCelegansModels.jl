@@ -13,7 +13,7 @@ function average_sliders(models::Vector{<:AbstractCelegansModel})
 
     n_ellipse_pts = length(transverse_splines(model))
     colorscheme = :cyclic_wrwbw_40_90_c42_n256
-    shading = MakieCore.automatic
+    shading = Makie.automatic
     color=colorschemes[colorscheme][1:256÷n_ellipse_pts:256]
     colorrange = (1,n_ellipse_pts)
 
@@ -92,7 +92,7 @@ function average_sliders(smts::ShroffCelegansModels.StraightenedModelTimeSeries)
 
     n_ellipse_pts = length(transverse_splines(model))
     colorscheme = :cyclic_wrwbw_40_90_c42_n256
-    shading = MakieCore.automatic
+    shading = Makie.automatic
     color=colorschemes[colorscheme][1:256÷n_ellipse_pts:256]
     colorrange = (1,n_ellipse_pts)
 

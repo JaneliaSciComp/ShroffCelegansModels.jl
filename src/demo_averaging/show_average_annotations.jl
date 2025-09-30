@@ -1,7 +1,7 @@
-using ProgressMeter
-using Statistics: mean, var
-using CoordinateTransformations
-using FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels.ProgressMeter
+using ShroffCelegansModels.Statistics: mean, var
+using ShroffCelegansModels.CoordinateTransformations
+using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
 
 include("../makie.jl")
 include("get_group_annotation_positions_over_time.jl")
