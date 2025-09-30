@@ -44,7 +44,7 @@ HDF5 = "0.17.2"
 Interpolations = "0.15, 0.16"
 Makie = "0.24.6"
 ProgressMeter = "1"
-Sockets = "1.11.0"
+Sockets = "1"
 ThinPlateSplines = "0.1, 0.2.0"
 julia = "1"
 
