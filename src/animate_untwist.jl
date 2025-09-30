@@ -147,7 +147,7 @@ function animate_untwist(smodel; fig = nothing)
     sleep(1)
 
     for rep in 1:3
-        mesh!(ax, M; shading = MakieCore.automatic, color = [i for c in 1:length(model) for i in 1:3], colormap = :buda)
+        mesh!(ax, M; shading = Makie.automatic, color = [i for c in 1:length(model) for i in 1:3], colormap = :buda)
         sleep(1)
 
         for i in 0:10:100
@@ -257,7 +257,7 @@ function controllable_untwist(smodel; fig = nothing)
     # for rep in 1:3
     time = Observable(0)
 
-        mesh!(ax, M; shading = MakieCore.automatic, color = [i for c in 1:length(model) for i in 1:3], colormap = :buda)
+        mesh!(ax, M; shading = Makie.automatic, color = [i for c in 1:length(model) for i in 1:3], colormap = :buda)
         # sleep(1)
 
     on(time) do t

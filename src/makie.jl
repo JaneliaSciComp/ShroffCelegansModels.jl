@@ -1,9 +1,9 @@
 using ShroffCelegansModels: AbstractCelegansModel, transverse_splines, get_model_contour_mesh, num_transverse_splines
-using ColorSchemes: colorschemes
-using MakieCore: MakieCore
-using GeometryBasics: Point3, Point3f
+using ShroffCelegansModels.ColorSchemes: colorschemes
+using ShroffCelegansModels.Makie: Makie
+using ShroffCelegansModels.GeometryBasics: Point3, Point3f
 using ShroffCelegansModels.Points: cross_sections
-using Observables: throttle
+using ShroffCelegansModels.Observables: throttle
 
 function plot_celegans_model(model::AbstractCelegansModel)
     r = LinRange(0, 1, length(model))
@@ -39,10 +39,10 @@ const cyclic_colorschemes = [
 ]
 
 
-function MakieCore.mesh(
+function Makie.mesh(
     model::AbstractCelegansModel;
     colorscheme = :cyclic_tritanopic_cwrk_40_100_c20_n256,
-    shading = MakieCore.automatic,
+    shading = Makie.automatic,
     n_ellipse_pts = num_transverse_splines(model),
     color=repeat(colorschemes[colorscheme][1:256÷n_ellipse_pts:256], length(model)),
     colorrange = (1,n_ellipse_pts),
@@ -61,11 +61,11 @@ function MakieCore.mesh(
     )
 end
 
-function MakieCore.mesh!(
+function Makie.mesh!(
     axis,
     model::AbstractCelegansModel;
     colorscheme = :cyclic_wrwbw_40_90_c42_n256,
-    shading = MakieCore.automatic,
+    shading = Makie.automatic,
     n_ellipse_pts = num_transverse_splines(model),
     color=repeat(colorschemes[colorscheme][1:256÷n_ellipse_pts:256], length(model)),
     colorrange = (1,n_ellipse_pts),
@@ -85,12 +85,12 @@ function MakieCore.mesh!(
     )
 end
 
-MakieCore.convert_arguments(P::Type{<: MakieCore.Mesh}, model::AbstractCelegansModel) =
-    MakieCore.convert_arguments(P, get_model_contour_mesh(model))
-MakieCore.convert_arguments(P::Type{<: MakieCore.Mesh}, model::AbstractCelegansModel, f::Function) =
-    MakieCore.convert_arguments(P, get_model_contour_mesh(model, transform_points = f))
+Makie.convert_arguments(P::Type{<: Makie.Mesh}, model::AbstractCelegansModel) =
+    Makie.convert_arguments(P, get_model_contour_mesh(model))
+Makie.convert_arguments(P::Type{<: Makie.Mesh}, model::AbstractCelegansModel, f::Function) =
+    Makie.convert_arguments(P, get_model_contour_mesh(model, transform_points = f))
 
-function MakieCore.convert_arguments(P::Type{<: MakieCore.Lines}, model::AbstractCelegansModel, f::Function = identity)
+function Makie.convert_arguments(P::Type{<: Makie.Lines}, model::AbstractCelegansModel, f::Function = identity)
     splines = transverse_splines(model)
     r = LinRange(0, 1, length(model))
     pts = map(splines) do spline
@@ -106,11 +106,11 @@ function MakieCore.convert_arguments(P::Type{<: MakieCore.Lines}, model::Abstrac
     pts = permutedims(hcat(pts, gaps), [2,1]) |> vec
     pts = vcat(pts...)
     pts = f.(pts)
-    MakieCore.convert_arguments(P, pts)
+    Makie.convert_arguments(P, pts)
 end
 
-#function MakieCore.convert_arguments(P::Type{<: MakieCore.Text}, model::AbstractCelegansModel, f::Function = identity)
-function MakieCore.text!(ax, model::AbstractCelegansModel, f::Function = identity)
+#function Makie.convert_arguments(P::Type{<: Makie.Text}, model::AbstractCelegansModel, f::Function = identity)
+function Makie.text!(ax, model::AbstractCelegansModel, f::Function = identity)
     pts = ShroffCelegansModels.interpolation_points(model)
     splines = transverse_splines(model)
     # This probably swapped. 1 should be right, 17 should be left

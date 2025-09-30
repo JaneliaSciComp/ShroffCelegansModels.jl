@@ -1,4 +1,4 @@
-using CircStats
+# using CircStats
 
 function stretched_analysis(smodel)
     model = parent(smodel)

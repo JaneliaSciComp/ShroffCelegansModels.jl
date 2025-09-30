@@ -1,4 +1,4 @@
-using BSplineKit
+using ShroffCelegansModels.BSplineKit
 
 function get_cell_trajectory_dict(dataset::ShroffCelegansModels.Datasets.NormalizedDataset; use_myuntwist = false)
     annotations = load_straightened_annotations_over_time(dataset; use_myuntwist)
