@@ -1,10 +1,12 @@
-using Makie
 using ShroffCelegansModels
-using Printf
-using GeometryBasics
-using JSON3
-using Dates
-using Sockets
+using ShroffCelegansModels.Makie
+using ShroffCelegansModels.Printf
+using ShroffCelegansModels.GeometryBasics
+using ShroffCelegansModels.JSON3
+using ShroffCelegansModels.Dates
+using ShroffCelegansModels.Sockets
+using ShroffCelegansModels.HDF5
+
 
 const ANNOTATION_PERSIST_SERVER_PORT = 3129
 
@@ -223,6 +225,7 @@ function fix_annotation_ap_axis(
 
     twisted_seam_cell_text = Observable(String.([tmodel.names[2:2:end]; tmodel.names[1:2:end]]))
 
+
     twisted_mesh_plot = mesh!(
         ax_twisted,
         twisted_mesh;
@@ -232,17 +235,30 @@ function fix_annotation_ap_axis(
         alpha = 0.5,
         inspectable = false
     )
-    connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    #connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    twisted_mesh_plot.visible = false
+    on(contour_mesh_toggle.active) do v
+        twisted_mesh_plot.visible = v
+    end
     lines!(ax_twisted, twisted_central_spline)
     scatter!(ax_twisted, twisted_central_pts)
     cs_lines = lines!(ax_twisted, twisted_central_line_match)
-    connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    #connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    cs_lines.visible = false
+    on(central_spline_lines_toggle.active) do v
+        cs_lines.visible = v
+    end
     meshscatter!(ax_twisted, twisted_seam_cells; markersize = 1.0, color = :gray, alpha = 0.5, transparency = true)
     ms_annotation_cells = meshscatter!(ax_twisted, twisted_annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 0.5, transparency = true)
     text!(ax_twisted, twisted_seam_cell_labels; text = twisted_seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax_twisted, twisted_annotation_cells; text = twisted_annotation_text, align = (:right, :bottom))
-    connect!(ann_txt.visible, annotation_text_toggle.active)
+    #connect!(ann_txt.visible, annotation_text_toggle.active)
+    annotation_text_toggle.active = false
+    on(annotation_text_toggle.active) do v
+        ann_txt.visible = v
+    end
     @info "twisted_seam_cell_labels" twisted_seam_cell_labels[] tmodel.names
+
 
     distances = Observable(Float64[])
     selected_distance = Observable(0.0)
@@ -254,21 +270,26 @@ function fix_annotation_ap_axis(
     Npts = length(tmodel)
     z = LinRange(0, 1, Npts)
     max_distance = Observable(Float64[])
-    lines!(ax_distance, central_spline_arc_lengths, distances)
+    distances_lines = lines!(ax_distance, central_spline_arc_lengths[], distances[])
     hlines!(ax_distance, selected_distance)
-    lines!(ax_distance, central_spline_arc_lengths, max_distance)
-    scatter!(ax_distance, central_spline_arc_lengths, distances, color = distances, colormap = Reverse(:viridis))
-    scatter!(ax_twisted, distance_central_pts, color = distances, colormap = Reverse(:viridis))
+    max_distance_lines = lines!(ax_distance, central_spline_arc_lengths[], max_distance)
+    distances_scatter = scatter!(ax_distance, central_spline_arc_lengths[], distances[], color = distances[], colormap = Reverse(:viridis))
+    distance_central_pts_scatter = scatter!(ax_twisted, distance_central_pts, color = distances[], colormap = Reverse(:viridis))
     selected_twisted_annotation_cell = Observable([twisted_annotation_cells[][selected_annotation_idx[]]])
     meshscatter!(ax_twisted, selected_twisted_annotation_cell, color = :red, markersize=1.1)
 
+
+    #=
     ratio = @lift try
         $distances ./ $max_distance
     catch err
         ones(size($max_distance))
     end
-    lines!(ax_ratio, central_spline_arc_lengths, ratio)
-    hlines!(ax_ratio, 1.0, linestyle = :dash)
+    =#
+    ratio = Observable(distances[])
+    ratio_lines = lines!(ax_ratio, central_spline_arc_lengths[], ratio)
+    # hlines!(ax_ratio, 1.0, linestyle = :dash)
+    hlines!(ax_ratio, 1.0, linestyle = :solid)
 
     nt_obs = Observable(0.0) 
 
@@ -344,7 +365,8 @@ function fix_annotation_ap_axis(
 
     on(throttle(0.1, expansion_factor_slider.value)) do expansion_factor_value
         # TODO compute value from timepoint slider
-        value = time_normalized_slider.value[]
+        # value = time_normalized_slider.value[]
+        value = nt_obs[]
         tmodel = mts_nt(value)
         annotation_positions = twisted_annotation_positions(value)
         if !ismissing(tmodel)
@@ -365,6 +387,7 @@ function fix_annotation_ap_axis(
 
 
     function plot_distance(idx)
+        println("plot_distance")
         selected_annotation_idx[] = idx
         #println(idx)
         try
@@ -376,19 +399,32 @@ function fix_annotation_ap_axis(
         Npts = length(tmodel)
         z = LinRange(0, 1, Npts)
         central_pts = swapyz_scale.(cs.(z))
-        central_spline_arc_lengths.val = [0; cumsum(norm.(diff(central_pts)))]
-        distance_central_pts[] = central_pts
+        # central_spline_arc_lengths.val = [0; cumsum(norm.(diff(central_pts)))]
+        _central_spline_arc_lengths = [0; cumsum(norm.(diff(central_pts)))]
+        central_spline_arc_lengths[] = _central_spline_arc_lengths
+        # distance_central_pts[] = central_pts
 
         max_r = ShroffCelegansModels.max_radius_function(tmodel)
         expansion_factor_value = expansion_factor_slider.value[]
-        max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        _max_distance = max_r.(z) .* voxel_size .* expansion_factor_value
+        # max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        Makie.update!(max_distance_lines, arg1 = _central_spline_arc_lengths, arg2 = _max_distance)
 
         pt = twisted_annotation_cells[][idx]
-        distances[] = norm.(central_pts .- pt)
+        _distances = norm.(central_pts .- pt)
+        distances[] = _distances
+        #distances[] = norm.(central_pts .- pt)
+        Makie.update!(distances_lines, arg1 = _central_spline_arc_lengths, arg2 = _distances)
+        Makie.update!(distances_scatter, arg1 = _central_spline_arc_lengths, arg2 = _distances, color = _distances)
+        Makie.update!(distance_central_pts_scatter, arg1 = central_pts, color = _distances)
+
+        _ratio = _distances ./ _max_distance
+        Makie.update!(ratio_lines, arg1 = _central_spline_arc_lengths, arg2 = _ratio)
+
         #autolimits!(ax_distance)
         #ylims!(ax_distance, nothing)
-        limits!(ax_distance, (0, 200), (0, maximum(distances[])))
-        limits!(ax_ratio, (0, 200), (0, maximum(ratio[])))
+        limits!(ax_distance, (0, 200), (0, maximum(_distances)))
+        limits!(ax_ratio, (0, 200), (0, maximum(_ratio)))
         selected_distance[] = norm(twisted_central_pts[][idx] - pt)
 
         selected_annotation_name[] = twisted_annotation_text[][idx]
@@ -414,14 +450,15 @@ function fix_annotation_ap_axis(
     original_z_positions = let idx=1
         Observable((x->x[idx][2]).(original_annotation_positions_over_time))
     end
-    lines!(ax_z, cell_key_range, original_z_positions; color = :gray, linestyle = :dash, label = "Original Z positions")
+    lines!(ax_z, cell_key_range, original_z_positions; color = :gray, linestyle = :solid, label = "Original Z positions")
+
     z_lines = lines!(ax_z, cell_key_range, z_positions)
     vlines!(ax_z, timepoint_slider.value, color = :red)
     DataInspector(ax_z)
 
     selected_z_position = Observable(z_positions[][timepoint_slider.value[]-first(cell_key_range)+1])
-    vlines!(ax_distance, selected_z_position; color = :red, linestyle = :dash)
-    vlines!(ax_ratio, selected_z_position; color = :red, linestyle = :dash)
+    vlines!(ax_distance, selected_z_position; color = :red, linestyle = :solid)
+    vlines!(ax_ratio, selected_z_position; color = :red, linestyle = :solid)
 
     #common_annotations_text = collect(keys(annotation_dict))
     common_annotations_text = _annotation_text
@@ -435,13 +472,17 @@ function fix_annotation_ap_axis(
                 group_name = annotation_change_group_name(dataset.path, timepoint, annotation_name)
                 if haskey(h5f, group_name)
                     @info "Loading annotation changes from annotations_changes.h5" group_name annotation_idx annotation_name
-                    new_position = h5f[group_name]["new_position"][:,end]
-                    straight_annotation_positions_over_time[time_idx][annotation_idx] = Point3f(
-                        new_position[1],
-                        new_position[2],
-                        new_position[3]
-                    )
-                    @info "Loaded" new_position
+                    try
+                        new_position = h5f[group_name]["new_position"][:,end]
+                        straight_annotation_positions_over_time[time_idx][annotation_idx] = Point3f(
+                            new_position[1],
+                            new_position[2],
+                            new_position[3]
+                        )
+                        @info "Loaded" new_position
+                    catch err
+                        println(err)
+                    end
                 end
             end
         end
@@ -569,9 +610,6 @@ function fix_annotation_ap_axis(
     notify(annotation_menu.selection)
     f
 end
-
-using Sockets
-using HDF5
 
 @kwdef struct AnnotationChange
     ip_address::UInt64
