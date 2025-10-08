@@ -32,21 +32,17 @@ end
 
 using HDF5
 
-const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
-const annotation_position_cache = Dict{String, Any}()
-#const my_annotation_position_cache = Dict{String, Any}()
-const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
-
 include("demo_averaging/load_straightened_annotations_over_time.jl")
 include("demo_averaging/get_cell_trajectory_dict.jl")
 
 include("demo_averaging/save_cache.jl")
 
 # initialize my_annotation_position_cache
-@info "Loading straightened annotation positions..."
-load_annotation_cache()
-@info "Loading warped annotation positions..."
-load_annotations_cache()
+@info "Not loading annotation position cache..."
+#@info "Loading straightened annotation positions..."
+#load_annotation_cache()
+#@info "Loading warped annotation positions..."
+#load_annotations_cache()
 
 
 function save_annotation_position_cache(
@@ -168,7 +164,14 @@ function save_annotation_position_cache(
     end
 end
 
-function save_annotation_position_cache_all_dated(datasets::Dict{String, Vector{Datasets.NormalizedDataset}}; clear = true)
+# TODO: type the caches
+function save_annotation_position_cache_all_dated(
+    datasets::Dict{String, Vector{Datasets.NormalizedDataset}},
+    annotation_position_cache = annotation_position_cache,
+    my_annotation_position_cache = my_annotation_position_cache,
+    annotations_cache = annotations_cache;
+    clear = true
+)
     # Clear caches
     if clear
         empty!(annotation_position_cache)

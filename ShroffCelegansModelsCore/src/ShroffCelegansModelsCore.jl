@@ -20,6 +20,7 @@ module ShroffCelegansModelsCore
     using .ParametricSplines
     using .Types
 
+    # rename to build_celegans_model?
     include("build_model.jl")
     include("mesh.jl")
     include("straighten.jl")

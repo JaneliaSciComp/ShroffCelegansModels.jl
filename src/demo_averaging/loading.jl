@@ -70,12 +70,17 @@ end
 =#
 
 # Straightened annotations
-const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
+# const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
 # Warped annotations, with MIPAV straightening
-const annotation_position_cache = Dict{String, Any}()
+# const annotation_position_cache = Dict{String, Any}()
 #const my_annotation_position_cache = Dict{String, Any}()
 # Warped annotations, with Mark's straightening
-const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
+# const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
+
+using ShroffCelegansModels:
+    annotations_cache, # Straighted annotations
+    annotations_position_cache, # Warped annotations
+    my_annotation_position_cache # Warped annotations with Mark's straightening
 
 # TODO: Move from demo_averaging:408
 # const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()

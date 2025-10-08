@@ -28,36 +28,50 @@ module ShroffCelegansModels
     using StatsBase: StatsBase
     using ThinPlateSplines: ThinPlateSplines
     using TiffImages: TiffImages
+    using ShroffCelegansModelsCore:
+        ShroffCelegansModelsCore,
+        get_circle_points,
+        build_celegans_model,
+        get_model_contour_mesh,
+        get_sections,
+        get_model_manifold_mesh_components,
+        straighten_celegans_model,
+        psuedo_seam_cells,
+        average,
+        upsample,
+        ModelTimeSeries,
+        StraightenedModelTimeSeries,
+        get_lattice,
+        get_lattice_filepath,
+        nextModelIndex,
+        prevModelIndex,
+        radial_cross_section,
+        cross_section_area,
+        volume_by_cross_section,
+        nearest_central_pt,
+        get_central_point_parameters,
+        max_radius_function,
+        nearest_central_plane,
+        untwist_annotations,
+        untwist_annotation,
+        twisted_annotations,
+        distance_to_twisted_annotation
 
-    include("datasets.jl")
-    include("MIPAVIO.jl")   
+    using ShroffCelegansModelsCore.Datasets
+    using ShroffCelegansModelsCore.MIPAVIO: MIPAVIO
+    using ShroffCelegansModelsCore.ParametricSplines
+    using ShroffCelegansModelsCore.Types
+    using ShroffCelegansModelsCore.Points
 
-    include("util.jl")
-    include("ParametricSplines.jl")
-    include("types.jl")
+    # Straightened annotations
+    const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
+    # Warped annotations, with MIPAV straightening
+    const annotation_position_cache = Dict{String, Any}()
+    # Warped annotations, with Mark's straightening
+    const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
 
-    using .ParametricSplines
-    using .Types
 
-    include("build_model.jl")
-    include("mesh.jl")
-    include("straighten.jl")
 
-    include("average.jl")
-
-    using .Datasets
-
-    include("show.jl")
-    include("points.jl")
-
-    using .Points
-
-    include("model_time_series.jl")
-    include("area.jl")
-
-    include("annotation_untwist.jl")
     include("parse_worm_dataset_path.jl")
-
-    include("precompile.jl")
 
 end
