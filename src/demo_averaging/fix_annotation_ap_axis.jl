@@ -50,13 +50,21 @@ function fix_annotation_ap_axis(
 
     slider_range = LinRange(0.0, 1.0, length(cell_key_range))
     sliders = SliderGrid(f[4, 1:2],
-        (label="Time (Normalized)", range=slider_range),
+        #(label="Time (Normalized)", range=slider_range),
         (label="Timepoint", range=cell_key_range),
-        (label="Exp. Factor", range=1.0:0.01:4)
+        (label="Exp. Factor", range=1.0:0.01:4),
+        (label="Z (AP axis)", range=0:0.01:200)
     )
-    time_normalized_slider = sliders.sliders[1]
-    timepoint_slider = sliders.sliders[2]
-    expansion_factor_slider = sliders.sliders[3]
+    time_normalized_slider = nothing
+    slider_index = 1
+    #time_normalized_slider = sliders.sliders[slider_index]
+    #slider_index += 1
+    timepoint_slider = sliders.sliders[slider_index]
+    slider_index += 1
+    expansion_factor_slider = sliders.sliders[slider_index]
+    slider_index += 1
+    z_position_slider = sliders.sliders[slider_index]
+    slider_index += 1
 
     annotation_text_toggle = Toggle(f)
     central_spline_lines_toggle = Toggle(f)
@@ -72,10 +80,10 @@ function fix_annotation_ap_axis(
         ]
     )
     f[7, :] = buttongrid = GridLayout(tellwidth = false)
-    prev_button = buttongrid[1, 1] = Button(f, label = "Previous")
-    reset_button = buttongrid[1, 2] = Button(f, label = "Reset")
-    update_button = buttongrid[1, 3] = Button(f, label = "Update")
-    next_button = buttongrid[1, 4] = Button(f, label = "Next")
+    prev_button = buttongrid[1, 1] = Makie.Makie.Button(f, label = "Previous")
+    reset_button = buttongrid[1, 2] = Makie.Button(f, label = "Reset")
+    update_button = buttongrid[1, 3] = Makie.Button(f, label = "Update")
+    next_button = buttongrid[1, 4] = Makie.Button(f, label = "Next")
 
     n_upsample = 2
 
@@ -165,6 +173,7 @@ function fix_annotation_ap_axis(
     straight_annotation_positions_over_time = straight_annotation_positions.(slider_range)
     # Original positions for reset button
     original_annotation_positions_over_time = deepcopy(straight_annotation_positions_over_time)
+
 
     #_annotation_cells = Observable(_annotation_positions_over_time[1])
     straight_annotation_cells = Observable(straight_annotation_positions_over_time[1])
@@ -326,6 +335,9 @@ function fix_annotation_ap_axis(
         if !isnothing(time_normalized_slider) && !isapprox(time_normalized_slider.value[], nt)
             set_close_to!(time_normalized_slider, nt)
         end
+        if isnothing(time_normalized_slider)
+            nt_obs[] = nt
+        end
         selected_z_position[] = z_positions[][value-first(cell_key_range)+1]
         @info "Timepoint slider" value
     end
@@ -415,6 +427,27 @@ function fix_annotation_ap_axis(
     common_annotations_text = _annotation_text
     @info common_annotations_text
 
+    h5open("annotation_changes.h5", "r", swmr=true) do h5f
+        for time_idx in eachindex(cell_key_range)
+            timepoint = cell_key_range[time_idx]
+            for annotation_name in values(dataset.cell_key.mapping)
+                annotation_idx = findfirst(==(annotation_name), common_annotations_text)
+                group_name = annotation_change_group_name(dataset.path, timepoint, annotation_name)
+                if haskey(h5f, group_name)
+                    @info "Loading annotation changes from annotations_changes.h5" group_name annotation_idx annotation_name
+                    new_position = h5f[group_name]["new_position"][:,end]
+                    straight_annotation_positions_over_time[time_idx][annotation_idx] = Point3f(
+                        new_position[1],
+                        new_position[2],
+                        new_position[3]
+                    )
+                    @info "Loaded" new_position
+                end
+            end
+        end
+    end
+
+
     on(annotation_menu.selection) do selected
         idx = findfirst(==(selected), twisted_annotation_text[])
         #if selected_annotation_idx[] != idx
@@ -470,6 +503,7 @@ function fix_annotation_ap_axis(
         end
     end
 
+    update_z_slider::Bool = true
     function update_z_position!(value = nothing)
         if !isnothing(value)
             selected_z_position[] = value
@@ -486,6 +520,9 @@ function fix_annotation_ap_axis(
         pt = Point3{Float64}(pt[1], selected_z_position[], pt[3])
         straight_annotation_positions_over_time[time_idx][idx_common] = pt
         notify(z_positions)
+        if update_z_slider
+            set_close_to!(z_position_slider, selected_z_position[])
+        end
         begin
             # Send the change to the server
             change = AnnotationChange(
@@ -512,6 +549,12 @@ function fix_annotation_ap_axis(
             end
         end
         println("Updated z position for annotation $selected at timepoint $(timepoint_slider.value[]) to $(selected_z_position[])")
+    end
+
+    on(z_position_slider.value) do value
+        update_z_slider = false
+        update_z_position!(value)
+        update_z_slider = true
     end
 
     on(update_button.clicks) do _
@@ -616,7 +659,6 @@ function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVE
                         end
                         h5g = h5f[group_name]
                         column_names = (
-                            "timepoint",
                             "original_position",
                             "new_position",
                             "timestamp",
@@ -627,29 +669,24 @@ function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVE
                         end
                         if column_count == 0
                             @info "Creating columns in HDF5 group $group_name"
-                            timepoint_group = create_dataset(
-                                h5g, "timepoint", Int, (1,), max_dims = (-1,), chunk=(16,)
-                            )
                             original_position_group = create_dataset(
-                                h5g, "original_position", Float64, (3,1), max_dims = (3,-1), chunk=(3,16)
+                                h5g, "original_position", Float64, ((3,1), (3,-1)), chunk=(3,16)
                             )
                             new_position_group = create_dataset(
-                                h5g, "new_position", Float64, (3,1), max_dims = (3,-1), chunk=(3,16)
+                                h5g, "new_position", Float64, ((3,1), (3,-1)), chunk=(3,16)
                             )
                             timestamp_group = create_dataset(
-                                h5g, "timestamp", Float64, (1,), max_dims = (-1,), chunk=(16,)
+                                h5g, "timestamp", Float64, ((1,), (-1,)), chunk=(16,)
                             )
                             ip_address_group = create_dataset(
-                                h5g, "ip_address", UInt64, (1,), max_dims = (-1,), chunk=(16,)
+                                h5g, "ip_address", UInt64, ((1,), (-1,)), chunk=(16,)
                             )
                         elseif column_count == length(column_names)
                             @info "Columns already exist in HDF5 group $group_name"
-                            timepoint_group = h5g["timepoint"]
                             original_position_group = h5g["original_position"]
                             new_position_group = h5g["new_position"]
                             timestamp_group = h5g["timestamp"]
                             ip_address_group = h5g["ip_address"]
-                            HDF5.set_extent_dims(timepoint_group, (size(timepoint_group, 1) + 1,))
                             HDF5.set_extent_dims(original_position_group, (3, size(original_position_group, 2) + 1))
                             HDF5.set_extent_dims(new_position_group, (3, size(new_position_group, 2) + 1))
                             HDF5.set_extent_dims(timestamp_group, (size(timestamp_group, 1) + 1,))
@@ -658,7 +695,6 @@ function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVE
                             @error "HDF5 group $group_name has inconsistent columns"
                         end
                         @info "Writing annotation change to HDF5 group $group_name"
-                        timepoint_group[end] = c.timepoint
                         original_position_group[:,end] = Vector(c.original_position)
                         new_position_group[:,end] = Vector(c.new_position)
                         timestamp_group[end] = Dates.datetime2unix(Dates.now())
@@ -694,4 +730,128 @@ function shutdown_server()
     s = Sockets.connect("0.0.0.0", ANNOTATION_PERSIST_SERVER_PORT)
     JSON3.write(s, Dict(:shutdown => true))
     close(s)
+end
+
+function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
+    # changes = Dict{String,Pair{Vector{Point3{Float64}},Vector{Point3{Float64}}}}()
+    changes = Dict{String,Pair{Point3{Float64},Point3{Float64}}}()
+
+    h5open(filepath, "r") do h5f
+        function _descend(p::Union{HDF5.File,HDF5.Group})
+            for k in keys(p)
+                _descend(p[k])
+            end
+        end
+        function _descend(d::HDF5.Dataset)
+            _name = HDF5.name(d)
+            # @info "Processing dataset" _name d[]
+            _paths = splitpath(_name)
+            popfirst!(_paths)
+            idx = tryparse(Int, _paths[end-2])
+            if idx === nothing
+                idx = parse(Int, _paths[end-3])
+            end
+            # @info "Paths after popfirst" idx _paths[end-3:end]
+
+            #idx = pop!(_paths)
+            #idx = parse(Int, idx)
+
+            # TODO: check if _paths[1] is nearline or a Windows UNC
+            #_paths[1] = _paths[1] * ":\\"
+            # _path = join(_paths, '/')
+            _path = join([_paths[1] * ":", _paths[3:end]...], '\\')
+
+            if _paths[end] != "new_position"
+                # @info "Skipping dataset" _path "not a new_position dataset"
+                return
+            end
+
+            _old_position_path = join([_paths[1:end-1]..., "original_position"], '/')
+            old_positions = h5f[_old_position_path][]
+            old_pts = Point3{Float64}.(eachcol(old_positions))
+
+            data = d[]
+            pts = Point3{Float64}.(eachcol(data))
+            @debug "Got points" pts
+            #println(_path)
+            #println(HDF5.name(d))
+            #=
+            cache = get!(my_annotation_position_cache, _path) do
+                P = parent(d)
+                N = count(keys(P)) do k
+                    isa(P[k], HDF5.Dataset)
+                end
+                Vector{Vector{Point3{Float64}}}(undef, N)
+            end
+            cache[idx] = pts
+            =#
+            old_pt = first(old_pts)
+            new_pt = last(pts)
+            # Ignore changes if the old and new points are the same
+            if norm(new_pt - old_pt) < 1
+                @info "Ignoring change for $_path, old and new points are the same: $(old_pt) => $(new_pt)"
+                return
+            end
+            _path = replace(_path, "nearline" => "X")
+            changes[_path] = old_pt => new_pt
+        end
+        _descend(h5f)
+    end
+    return changes
+end
+
+"""
+    update_annotations_cache(annotations_cache, annotations_changes)
+
+Update the `annotations_cache` with the changes in `annotations_changes`.
+
+Parameters
+----------
+- `annotation_cache`: The current cache of annotation positions.
+    Usually ShroffCelegansModels.annotations_cache.
+- `annotations_changes`: The changes to be applied to the annotation cache.
+    Usually from `load_annotation_changes_cache`.
+
+Returns
+----------
+- The updated `annotations_cache`.
+"""
+function update_annotations_cache(
+    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
+    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}}
+)
+    annotations_cache_keys = keys(annotations_cache)
+    key_map_dict = Dict(first.(annotations_cache_keys) .=> annotations_cache_keys)
+    for (change_key, (old_pt, new_pt)) in annotations_changes
+        change_key_parts = splitpath(change_key)
+        timepoint = tryparse(Int, change_key_parts[end-3])
+        if isnothing(timepoint)
+            # Case when annotation name does not contain a slash
+            timepoint = parse(Int, change_key_parts[end-2])
+            dataset_path = joinpath(change_key_parts[begin:end-3])
+            annotation_name = change_key_parts[end-1]
+        else
+            # Case when annotation name contains a slash
+            # timepoint is change_key_parts[end-3]
+            dataset_path = joinpath(change_key_parts[begin:end-4])
+            annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
+        end
+        # Could error if dataset_path is not in key_map_dict
+        annotations_cache_key = key_map_dict[dataset_path]
+        dataset = ShroffCelegansModels.Dataset(dataset_path)
+        annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
+        # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
+        timepoint = timepoint - dataset.cell_key.start + 1
+        if ismissing(annotations_cache[annotations_cache_key][timepoint])
+            @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
+            annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
+            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(old_pt)
+        end
+        # Check old_pt matches the cached point
+        if annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] != swapyz_unscale(old_pt)
+            @warn "Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt))"
+        end
+        annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+    end
+    return annotations_cache
 end
