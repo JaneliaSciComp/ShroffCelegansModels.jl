@@ -49,6 +49,56 @@ function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<:
     return first.(arg_pt_dist), second.(arg_pt_dist), last.(arg_pt_dist)
 end
 
+function get_central_spline_distance_to_pts(
+    model::AbstractCelegansModel,
+    pts::AbstractVector{<: Point}
+)
+    cs = ShroffCelegansModelsCore.central_spline(model)
+    Npts = length(model)
+    z = LinRange(0, 1, Npts)
+    central_pts = cs.(z)
+    map(pts) do pt
+        norm.(central_pts .- pt)
+    end
+end
+
+function get_central_spline_distance_to_pt(
+    model::AbstractCelegansModel,
+    pt::Point
+)
+    cs = ShroffCelegansModelsCore.central_spline(model)
+    Npts = length(model)
+    z = LinRange(0, 1, Npts)
+    central_pts = cs.(z)
+    norm.(central_pts .- pt)
+end
+
+get_central_spline_distance_to_pt(
+    model::AbstractCelegansModel,
+    pt::AbstractArray
+) = get_central_spline_distance_to_pt(model, Point3(pt))
+
+function findlocalminima(v::AbstractVector{<: Real})
+    N = length(v)
+    minima = BitVector(undef, N)
+    minima[1] = false
+    minima[N] = false
+    for i in 2:N-1
+        minima[i] = (v[i] < v[i-1]) && (v[i] < v[i+1])
+    end
+    return findall(minima)
+end
+
+function get_untwisted_annotation_candidates(
+    model::AbstractCelegansModel,
+    pt::Point
+)
+    dists = get_central_spline_distance_to_pt(model, pt)
+    minima_indices = findlocalminima(dists)
+    candidates =  untwist_annotations(model, repeat([pt], length(minima_indices)), nothing; central_point_indices = minima_indices)
+    return collect(zip(candidates, dists[minima_indices]))
+end
+
 """
     get_central_point_parameters(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, central_spline_voxel_distances::AbstractVector{<: Real})
 
@@ -74,6 +124,24 @@ function get_central_point_parameters(
     return spline_param, central_pts, pt_to_central_dist
 end
 
+function get_central_point_parameters_from_indices(
+    model::AbstractCelegansModel,
+    pts::AbstractVector{<: Point},
+    indices::AbstractVector{<: Integer}
+)
+    cs = ShroffCelegansModelsCore.central_spline(model)
+    Npts = length(model)
+    z = LinRange(0, 1, Npts)
+    central_pts = cs.(z)
+    spline_param = z[indices]
+    central_pts = central_pts[indices]
+    pt_to_central_dist = norm.(central_pts .- pts)
+    return spline_param, central_pts, pt_to_central_dist
+end
+
+"""
+    max_radius_function(model::AbstractCelegansModel)
+"""
 function max_radius_function(model)
     function max_radius(z)
         tss = transverse_splines(model)
@@ -158,7 +226,8 @@ ShroffCelegansModelsCore.untwist_annotations(model, pts)
 function untwist_annotations(
     model::AbstractCelegansModel,
     pts::AbstractVector{<: Point},
-    central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing
+    central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing;
+    central_point_indices::Union{AbstractVector{<: Integer},Nothing} = nothing
 )
     thresholds = [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.5, 2.0, 2.5]
 
@@ -166,10 +235,14 @@ function untwist_annotations(
     # t is the spline parameter
     # ncp is the nearest central point
     # pts_norm is the distance from the point to the central spline
-    if isnothing(central_spline_voxel_distances)
-        t, ncp, pts_norm = nearest_central_pt(model, pts, thresholds)
+    if isnothing(central_point_indices)
+        if isnothing(central_spline_voxel_distances)
+            t, ncp, pts_norm = nearest_central_pt(model, pts, thresholds)
+        else
+            t, ncp, pts_norm = get_central_point_parameters(model, pts, central_spline_voxel_distances)
+        end
     else
-        t, ncp, pts_norm = get_central_point_parameters(model, pts, central_spline_voxel_distances)
+        t, ncp, pts_norm = get_central_point_parameters_from_indices(model, pts, central_point_indices)
     end
 
     # Objective: Compute the angle between the right direction and the point
