@@ -99,6 +99,11 @@ function get_untwisted_annotation_candidates(
     return collect(zip(candidates, dists[minima_indices]))
 end
 
+get_untwisted_annotation_candidates(
+    model::AbstractCelegansModel,
+    pt::AbstractArray
+) = get_untwisted_annotation_candidates(model, Point3(pt))
+
 """
     get_central_point_parameters(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, central_spline_voxel_distances::AbstractVector{<: Real})
 
