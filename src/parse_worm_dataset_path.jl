@@ -43,11 +43,18 @@ include("demo_averaging/get_cell_trajectory_dict.jl")
 include("demo_averaging/save_cache.jl")
 
 # initialize my_annotation_position_cache
-@info "Loading straightened annotation positions..."
-load_annotation_cache()
+try
+    @info "Loading straightened annotation positions..."
+    load_annotation_cache()
+catch err
+    @warn "There was an issue loading the annotation cache" err
+end
 @info "Loading warped annotation positions..."
-load_annotations_cache()
-
+try
+    load_annotations_cache()
+catch err
+    @warn "There was an issue loading the my annotation cache" err
+end
 
 function save_annotation_position_cache(
     filename::String,
