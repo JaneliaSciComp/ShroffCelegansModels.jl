@@ -51,7 +51,7 @@ load_annotations_cache()
 
 function save_annotation_position_cache(
     filename::String,
-    datasets::Dict{String, Vector{ShroffCelegansModels.Datasets.NormalizedDataset}},
+    datasets::Dict{String, Vector{ShroffCelegansModelsCore.Datasets.NormalizedDataset}},
     cache::Dict{String, Vector{Vector{Point3{Float64}}}};
     num_timepoints::Union{Symbol, Int} = :raw,
     expand_annotations::Bool = false,
