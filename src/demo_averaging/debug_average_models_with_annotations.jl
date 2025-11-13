@@ -183,7 +183,8 @@ function debug_average_models_with_annotations(
     meshscatter!(ax, _annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 1)
     text!(ax, _seam_cell_labels; text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]], align = (:right, :bottom))
     ann_txt = text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
-    connect!(ann_txt.visible, annotation_text_toggle.active)
+    #connect!(ann_txt.visible, annotation_text_toggle.active)
+    ann_txt.visible =  annotation_text_toggle.active
     #lines!(ax, _lines, color = :black)
     ylims!(ax, (0, 200))
 

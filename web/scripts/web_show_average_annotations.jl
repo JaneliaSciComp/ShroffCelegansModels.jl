@@ -1,5 +1,6 @@
 using WGLMakie
 using Bonito
+using Revise
 
 
 if abspath(PROGRAM_FILE) == @__FILE__
@@ -7,6 +8,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
 end
 
 includet("../../scripts/launch_show_average_annotations.jl")
+#includet("../../src/demo_averaging/show_average_annotations.jl")
 
 function web_show_average_annotations(datasets = datasets)
     menu = DOM.div(
@@ -16,14 +18,17 @@ function web_show_average_annotations(datasets = datasets)
             end
         )
     )
+    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
     server = Server(
-        "shroff-data.int.janelia.org", 8180;
+        shroff_data_ip, 8180;
         proxy_url="https://shroff-data.int.janelia.org/show_average_annotations/"
     )
     route!(server, "/" => App(menu))
     for k in keys(datasets)
         route!(server, "/$k" => App(; title="$k: Shroff C. elegans show average annotations") do
                 return show_average_annotations(avg_models, datasets[k]; use_myuntwist=true);
+                #Revise.retry()
+                #return @invokelatest show_average_annotations(avg_models, datasets[k]; use_myuntwist=true);
         end)
     end
     return server

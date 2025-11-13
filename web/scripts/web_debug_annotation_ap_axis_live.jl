@@ -1,5 +1,6 @@
 using WGLMakie
 using Bonito
+using Sockets
 
 
 if abspath(PROGRAM_FILE) == @__FILE__
@@ -21,8 +22,9 @@ function web_debug_annotation_ap_axis(datasets = datasets)
             end
         )
     )
+    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
     server = Server(
-        "shroff-data.int.janelia.org", 9181;
+        shroff_data_ip, 9181;
         proxy_url="https://shroff-data.int.janelia.org/debug_annotation_ap_axis_live/"
     )
     route!(server, "/" => App(menu))
