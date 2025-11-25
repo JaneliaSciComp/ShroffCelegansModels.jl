@@ -1,6 +1,6 @@
 using Dates
 using Printf
-using HDF5
+using ShroffCelegansModels.HDF5
 
 avg_models_filename = "celegans_avg_models_" * Dates.format(now(), "yyyy_mm_dd") * ".h5"
 

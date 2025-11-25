@@ -1,6 +1,6 @@
-using HDF5
 using Printf
-using GeometryBasics
+using ShroffCelegansModels.HDF5
+using ShroffCelegansModels.GeometryBasics
 
 if !@isdefined(my_annotation_position_cache)
     const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()

@@ -3,6 +3,8 @@ if gethostname() == "KITTISOPIKULM-2"
     const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2024_09_05_v1.json"
 elseif gethostname() == "vm7249"
     const config_path = "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/config_2024_09_05_v1.json"
+elseif gethostname() == "chend-lm1"
+    const config_path = joinpath(dirname(@__DIR__), "..", "config_full_mac.json")
 end
 const voxel_size = 0.1625 # um
 

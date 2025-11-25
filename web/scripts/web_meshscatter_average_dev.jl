@@ -26,10 +26,14 @@ function meshscatter_average_webapp()
         end
     end
 
-    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string,
+    #=
+    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
     server = Server(app, shroff_data_ip, 8480;
         proxy_url="https://shroff-data.int.janelia.org/meshscatter_average_dev/"
     )
+    =#
+    server = Server(app, "127.0.0.1", 8480)
+    
     route!(server, "/nerve_ring" => nerve_ring_app)
     return server
 end

@@ -91,6 +91,9 @@ if gethostname() == "KITTISOPIKULM-2"
 elseif gethostname() == "vm7249"
     # shroff-data.int.janelia.org
     alias_cache_unix("/nearline/shroff")
+elseif gethostname() == "chend-lm1"
+    # Diyi's Mac - SMB mount
+    alias_cache_unix("/Volumes/shroff")
 end
 
 function main()
