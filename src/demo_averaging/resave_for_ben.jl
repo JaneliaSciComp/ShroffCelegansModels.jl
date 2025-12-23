@@ -42,20 +42,24 @@ resave_for_ben("edited_smoothed_average_annotations_r020_theta020_z030_with_seam
 - Cell names from HDF5 annotation labels
 - **Auto-detects number of timepoints** from HDF5 structure (no hard-coding)
 - Works with any number of timepoints (201, 371, etc.)
+- **Automatically excludes unmapped cells** (A13, C2) not present in CellKey.csv
 """
 function resave_for_ben(filename;
                          target_filename = replace(filename, ".h5" => "_for_ben.csv"),
-                         time_range = (381, 751))
+                         time_range = (381, 751),
+                         exclude_cells = ["A13", "C2"])  # Unmapped cells not in CellKey.csv
 
     if isfile(target_filename)
         error("$target_filename exists")
     end
 
     println("Reading HDF5 file: $filename")
+    println("Excluding cells: $(join(exclude_cells, ", "))")
 
     # Extract data from HDF5
     ben_data = h5open(filename) do h5f
         all_rows = []
+        total_excluded = 0
 
         for strain in keys(h5f)
             if strain == "timepoint_range"
@@ -91,6 +95,12 @@ function resave_for_ben(filename;
 
             # Create rows for each cell × timepoint combination
             for (cell_idx, cell_name) in enumerate(labels)
+                # Skip excluded cells (A13, C2, etc.)
+                if cell_name in exclude_cells
+                    total_excluded += 1
+                    continue
+                end
+
                 for (tp_idx, time) in enumerate(minutes)
                     # Extract x, y, z coordinates
                     x = positions[cell_idx, tp_idx, 1]
@@ -103,6 +113,7 @@ function resave_for_ben(filename;
             end
         end
 
+        println("\nExcluded $total_excluded instances of unmapped cells")
         all_rows
     end
 
@@ -166,3 +177,6 @@ end
 
 # Example usage (commented out):
 # resave_for_ben("edited_smoothed_average_annotations_r020_theta020_z030_with_seam_cells.h5")
+
+# For the Dec 23, 2025 data (371 timepoints):
+# resave_for_ben("/nrs/shroff/data_internal/celegans_model_data/2025_12_23/average_annotations_2025_12_23_tosif.h5")
