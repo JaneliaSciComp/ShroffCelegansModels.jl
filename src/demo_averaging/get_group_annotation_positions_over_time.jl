@@ -28,6 +28,31 @@ function get_datasets_info(datasets)
 
     return datasets_info
 end
+
+function annotation_positions(smts_nt, annotation_dict, nt)
+    	N_timepoints = 200
+	_smodel = smts_nt(nt)
+idx = round(Int, nt*N_timepoints + 1)
+	_model = avg_models[idx]
+	@info "annotation positions" nt
+	positions = missing
+	try
+	positions = swapyz_scale.(transform_annotations(
+				_smodel, _model, map(values(annotation_dict)) do ann
+				if ismissing(ann)
+				return Point3(NaN)
+				else
+				ann(nt)
+				end
+				end
+				))
+	catch err
+	@error "A problem occured at $nt with avg_model[$idx]" exception=(err, Base.catch_backtrace())
+	positions = [Point3(NaN) for i in eachindex(annotation_dict)]
+	end
+	return positions
+end
+
 function get_group_annotation_positions_over_time(datasets, cache)
     use_myuntwist = true
     r = LinRange(0,1,201)
