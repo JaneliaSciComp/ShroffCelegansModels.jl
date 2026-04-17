@@ -8,16 +8,20 @@ MIPAV is a Java program from the National Institutes of Health
 """
 module MIPAVIO
     using DataFrames: DataFrame
-    using GeometryBasics: Point3, Point3f
+    using GeometryBasics: Point3, Point3f, Point3d
     using CSV: CSV
     using ShroffCelegansModels: Datasets
     using Statistics: mean
 
     export mipav_df_to_points, mipav_df_to_point_dict
 
-    function mipav_df_to_points(df::DataFrame)
-        map(df.x_voxels, df.y_voxels, df.z_voxels) do x,y,z
-            Point3(x,y,z)
+    function mipav_df_to_points(df::DataFrame)::Vector{Point3d}
+        map(
+            df.x_voxels::Vector{Float64},
+            df.y_voxels::Vector{Float64},
+            df.z_voxels::Vector{Float64}
+        ) do x,y,z
+            Point3d(x,y,z)
         end
     end
 

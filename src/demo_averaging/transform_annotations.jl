@@ -1,3 +1,5 @@
+using ThinPlateSplines: tps_solve
+
 function transform_annotations(from_model, to_model, annotations::AbstractVector{<: Point})
     warp_from = ShroffCelegansModels.lattice(from_model) |> vec
     warp_to = ShroffCelegansModels.lattice(to_model) |> vec

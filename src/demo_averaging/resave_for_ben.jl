@@ -43,9 +43,12 @@ resave_for_ben("edited_smoothed_average_annotations_r020_theta020_z030_with_seam
 - **Auto-detects number of timepoints** from HDF5 structure (no hard-coding)
 - Works with any number of timepoints (201, 371, etc.)
 """
-function resave_for_ben(filename;
-                         target_filename = replace(filename, ".h5" => "_for_ben.csv"),
-                         time_range = (381, 751))
+function resave_for_ben(
+    filename;
+    target_filename = replace(filename, ".h5" => "_for_ben.csv"),
+    time_range = (381, 751),
+    explicit::Bool = false
+)
 
     if isfile(target_filename)
         error("$target_filename exists")

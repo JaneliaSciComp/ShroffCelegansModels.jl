@@ -21,13 +21,14 @@ function (mts::ModelTimeSeries)(time_offset::Integer)
         end
     catch err
         if err isa BoundsError
-            @warn "BoundsError" time_offset timepoint lattice_filepath
-            return nothing
-        else
-            rethrow(err)
+            @warn "BoundsError" time_offset
+            # return nothing
         end
+        rethrow(err)
     end
 end
+Base.length(mts::ModelTimeSeries) = length(range(mts.dataset.cell_key))
+Base.iterate(mts::ModelTimeSeries, state=1) = state > length(mts) ? nothing : (mts(state), state + 1)
 
 struct StraightenedModelTimeSeries{Model <: AbstractCelegansModel, Cache <: LRU{<: AbstractString, Union{Model,Missing}}, ModelTS <: ModelTimeSeries}
     modelTimeSeries::ModelTS

@@ -159,7 +159,7 @@ function untwist_annotations(
     model::AbstractCelegansModel,
     pts::AbstractVector{<: Point},
     central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing
-)
+)::Vector{Point3d}
     thresholds = [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.5, 2.0, 2.5]
 
     # For each point, find the nearest point along the central spline
@@ -211,8 +211,8 @@ function untwist_annotations(
     # The returned untwisted annotation points are computed using the angle and distance
     # between the central spline and the annotation point
     # The z-coordinate is the same as that of the nearest central point on the straightened model
-    return map(zip(angles,pts_norm,z)) do (angle, dist,z)
-        Point3(cos(angle)*dist, sin(angle)*dist, z)
+    return map(zip(angles,pts_norm,z)) do (angle, dist, z)
+        Point3d(cos(angle)*dist, sin(angle)*dist, z)
     end
 end
 
@@ -250,12 +250,12 @@ dataset = ShroffCelegansModels.NormalizedDataset("X:/shrofflab/OD1599_NU/120619_
 c3_pt = ShroffCelegansModels.untwist_annotations(dataset, 71)["C3"]
 ```
 """
-function untwist_annotations(dataset::NormalizedDataset, timepoint::Int=1)
+function untwist_annotations(dataset::NormalizedDataset, timepoint::Int=1)::Union{Missing, Dict{String, Point3d}}
     mts = ModelTimeSeries(dataset)
     try
         df = MIPAVIO.get_integrated_annotations(dataset, timepoint)
-        pts = MIPAVIO.mipav_df_to_points(df)
-        return Dict(df.name .=> untwist_annotations(mts(timepoint), pts))
+        pts = MIPAVIO.mipav_df_to_points(df)::Vector{Point3d}
+        return Dict{String,Point3d}(Vector{String}(df.name)::Vector{String} .=> untwist_annotations(mts(timepoint), pts))
     catch err
         return missing
     end

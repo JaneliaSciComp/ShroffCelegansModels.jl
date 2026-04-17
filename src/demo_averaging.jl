@@ -4,7 +4,7 @@ using ShroffCelegansModels.Types: AbstractCelegansModel
 using JSON3
 using Missings
 using StatsBase
-includet("makie.jl")
+include("makie.jl")
 using Makie
 using CSV
 using DataFrames

@@ -856,7 +856,8 @@ Returns
 """
 function update_annotations_cache(
     annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
-    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}}
+    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}};
+    dry_run::Bool = false
 )
     annotations_cache_keys = keys(annotations_cache)
     key_map_dict = Dict(first.(annotations_cache_keys) .=> annotations_cache_keys)
@@ -875,21 +876,39 @@ function update_annotations_cache(
             annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
         end
         # Could error if dataset_path is not in key_map_dict
+        if !haskey(key_map_dict, dataset_path)
+            @warn "Dataset path $dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
+            continue
+        end
         annotations_cache_key = key_map_dict[dataset_path]
         dataset = ShroffCelegansModels.Dataset(dataset_path)
         annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
+        if isnothing(annotation_symbol)
+            @warn "Annotation $annotation_name not found in dataset $dataset_path, skipping change at timepoint $timepoint"
+            continue
+        end
         # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
         timepoint = timepoint - dataset.cell_key.start + 1
         if ismissing(annotations_cache[annotations_cache_key][timepoint])
             @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
-            annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
-            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(old_pt)
+            if !dry_run
+                annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
+                annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+            end
         end
         # Check old_pt matches the cached point
-        if annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] != swapyz_unscale(old_pt)
-            @warn "Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt))"
+        try
+            if !isapprox(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
+                _norm = norm(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
+                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
+                This may indicate the cache is out of sync with the changes, or the change does not apply cleanly to the current cache state. Consider reviewing this change and the current cache state to ensure consistency."""
+            end
+        catch e
+            @warn "Error checking annotation point for $annotations_cache_key at timepoint $timepoint with annotation $annotation_symbol: $e"
         end
-        annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+        if !dry_run
+            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+        end
     end
     return annotations_cache
 end

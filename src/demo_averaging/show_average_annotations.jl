@@ -372,10 +372,10 @@ function show_average_annotations(
             Point2(polar_coord.θ, polar_coord.r)
         end
     end
-    lines!(polar_ax, polar_track; color = track3d_color, colormap = :lajolla)
-    scatter!(polar_ax, polar_annotations; color = scatter_color)
-    scatter!(polar_ax, polar_annotation_selected; color = :red)
-    text!(polar_ax, polar_annotations; text = common_annotations)
+    #lines!(polar_ax, polar_track; color = track3d_color, colormap = :lajolla)
+    #scatter!(polar_ax, polar_annotations; color = scatter_color)
+    #scatter!(polar_ax, polar_annotation_selected; color = :red)
+    #text!(polar_ax, polar_annotations; text = common_annotations)
 
     # selected annotation index
     a = nothing

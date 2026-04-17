@@ -7,9 +7,11 @@ function resave_for_tosif(filename; target_filename = replace(filename, ".h5" =>
         strain_matrices = Array{Float64,3}[]
         annotation_labels = String[]
         strain_labels = String[]
+        num_timepoints = 0
         for strain in keys(h5f)
             matrices = Matrix{Float64}[]
-            for tp in 1:201
+            num_timepoints = length(filter(contains("timepoint_"), keys(h5f[strain])))
+            for tp in 1:num_timepoints
                 tpk = @sprintf("timepoint_%03d", tp)
                 ds = h5f[strain][tpk]
                 push!(matrices, ds[])
@@ -19,7 +21,7 @@ function resave_for_tosif(filename; target_filename = replace(filename, ".h5" =>
             append!(strain_labels, repeat([strain], length(labels)))
             push!(strain_matrices, stack(matrices, dims=2))
         end
-        minutes = (0:0.005:1) * 420 .+ 420 |> collect
+        minutes = range(381, stop=751, length=num_timepoints) |> collect
         trajectories = cat(strain_matrices..., dims=1)
         trajectories = trajectories[:,:,[1,3,2]]
         (; trajectories, annotation_labels, strain_labels, minutes)

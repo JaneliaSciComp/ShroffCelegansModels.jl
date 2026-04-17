@@ -1,6 +1,9 @@
 using ShroffCelegansModels.BSplineKit
 
-function get_cell_trajectory_dict(dataset::ShroffCelegansModels.Datasets.NormalizedDataset; use_myuntwist = false)
+function get_cell_trajectory_dict(
+    dataset::ShroffCelegansModels.Datasets.NormalizedDataset;
+    use_myuntwist = false
+)::Dict{String, Union{Missing, BSplineKit.SplineExtrapolation{<: Spline{Point3d}}}}
     annotations = load_straightened_annotations_over_time(dataset; use_myuntwist)
     cells = collect(keys(annotations[1]))
 
@@ -28,7 +31,7 @@ function get_cell_trajectory_dict(dataset::ShroffCelegansModels.Datasets.Normali
             @error "There was an issue getting cell trajectory" cell dataset.path trajectory
             rethrow()
         end
-    end |> Dict
+    end |> Dict{String, Union{Missing, BSplineKit.SplineExtrapolation{<: Spline{Point3d}}}}
 
     return cell_trajectory_dict
 end
