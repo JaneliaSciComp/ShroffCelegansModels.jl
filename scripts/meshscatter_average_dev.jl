@@ -20,8 +20,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     colors_dict = load_colors_dict()
     function get_color(annotation)
         annotation = lowercase(annotation)
-        annotation = replace(annotation, "/" => "_")
-        get(colors_dict, annotation, RGBAf(0,0,0,0))
+        #annotation = replace(annotation, "/" => "_")
+        get(colors_dict, annotation, RGBAf(1,1,1,1))
     end
 
     # Font size
@@ -29,7 +29,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     # HPF Label
     label_offset = 8
-    time_text = Observable("hpf = 14:00")
+    time_text = Observable("hpf = 12:31")
     text!(-label_offset, 0, label_offset; text = time_text, fontsize=_fontsize)
 
     # Scalebar
@@ -198,8 +198,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     zoom!(ax.scene, 4)
     on(throttle(0.1, time_slider.value)) do t
-        total_minutes = (t-1)/200*420
-        hours = 7 + round(Int, total_minutes/60, RoundDown)
+        total_minutes = (t-1+11)/200*370
+        hours = 6 + round(Int, total_minutes/60, RoundDown)
         minutes = round(Int, mod(total_minutes, 60), RoundDown)
         time_text[] = "hpf = $hours:$(@sprintf("%02d", minutes))"
         if xy_bounding_radius > 0
@@ -240,7 +240,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         update_cam!(ax.scene, cc, 0, 0)
         scalebar[] = Point3f[[label_offset+1, scalebar_y_offset, -label_offset-1], [label_offset+1, scalebar_y_offset + scalebar_size_um, -label_offset-1]]
     end
-    vid = Observable(DOM.div("Press record..."; id="video_recording", style="color: white; display: none;"))
+    #vid = Observable(DOM.div("Press record..."; id="video_recording", style="color: white; display: none;"))
     on(record_button.clicks) do _
         # record(fig, "/var/www/shroff/test.mp4", time_slider.range[]; update=false) do t
         # VideoStream
@@ -251,7 +251,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
         controls_visible[] = true
         if !isnothing(session)
-            evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
+            #evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
         end
     end
     on(record_button2.clicks) do _
@@ -270,7 +270,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
         controls_visible[] = true
         if !isnothing(session)
-            evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
+            #evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
         end
     end
 
@@ -298,7 +298,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     =#
     #DOM.body(fig, style=Styles(CSS("background-color" => "black")))
     DataInspector(fig; backgroundcolor = :black)
-    DOM.div(fig, vid)
+    #DOM.div(fig, vid)
+    fig
 end
 #with_theme(meshscatter_all, theme_black())
 #set_theme!(theme_black())
