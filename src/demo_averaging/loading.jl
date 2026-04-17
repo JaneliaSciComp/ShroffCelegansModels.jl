@@ -1,12 +1,13 @@
 #const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_full.json"
 if gethostname() == "KITTISOPIKULM-2"
-    const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2024_09_05_v1.json"
+    const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
 elseif gethostname() == "vm7249"
-    const config_path = "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/config_2024_09_05_v1.json"
+    const config_path = "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/config_2025_12_17_v2.json"
 end
 const voxel_size = 0.1625 # um
 
 using LinearAlgebra
+using JSON3
 LinearAlgebra.BLAS.set_num_threads(12)
 
 @info "Reading Config JSON"
