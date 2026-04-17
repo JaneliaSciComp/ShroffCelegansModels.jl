@@ -66,10 +66,10 @@ function web_debug_annotation_ap_axis(datasets = retracked_datasets)
             end
         )
     )
-    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
+    shroff_data_ip = "0.0.0.0"
     server = Server(
         shroff_data_ip, 9281;
-        proxy_url="https://shroff-data.int.janelia.org/debug_annotation_ap_axis_retrack_live/"
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/debug_annotation_ap_axis_retrack_live/"
     )
     route!(server, "/" => App(menu))
     for k in keys(datasets)

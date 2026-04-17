@@ -23,8 +23,8 @@ function web_debug_annotation_ap_axis(datasets = datasets)
         )
     )
     server = Server(
-        string(Sockets.getaddrinfo("shroff-data.int.janelia.org")), 9381;
-        proxy_url="https://shroff-data.int.janelia.org/fix_annotation_ap_axis/"
+        "0.0.0.0", 9381;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/fix_annotation_ap_axis/"
     )
     route!(server, "/" => App(menu))
     for k in keys(datasets)

@@ -18,10 +18,10 @@ function web_show_average_annotations(datasets = datasets)
             end
         )
     )
-    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
+    shroff_data_ip = "0.0.0.0"
     server = Server(
         shroff_data_ip, 8180;
-        proxy_url="https://shroff-data.int.janelia.org/show_average_annotations/"
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/show_average_annotations/"
     )
     route!(server, "/" => App(menu))
     for k in keys(datasets)
