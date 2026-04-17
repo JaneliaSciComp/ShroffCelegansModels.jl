@@ -2,7 +2,7 @@
 if gethostname() == "KITTISOPIKULM-2"
     const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
 else
-    const config_path = joinpath(@__DIR__, "..", "..", "config_2024_09_05_v1.json")
+    const config_path = joinpath(@__DIR__, "..", "..", "config", "linux", "config_2026_03_19_v2.json")
 end
 const voxel_size = 0.1625 # um
 
