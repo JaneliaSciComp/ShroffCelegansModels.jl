@@ -1,0 +1,45 @@
+# CephFS PVC for /var/www/shroff/data/ (185MB HDF5 files migrated from VM).
+# Static web files (index.html etc.) are baked into the image — not stored here.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shroff-data-www
+  namespace: shroff-data
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ocs-storagecluster-cephfs
+  resources:
+    requests:
+      storage: 10Gi
+---
+# NFS PV/PVC for /nearline/shroff (Shroff Lab microscopy data — read by Julia apps)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: shroff-data-nearline
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: nearline.hhmi.org
+    path: /nearline3/shroff
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shroff-data-nearline
+  namespace: shroff-data
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: shroff-data-nearline
+  resources:
+    requests:
+      storage: 1Ti

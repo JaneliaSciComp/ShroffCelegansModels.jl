@@ -1,0 +1,22 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shroff-data
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+  annotations:
+    haproxy.router.openshift.io/timeout: 600s
+spec:
+  host: shroff-data.int.janelia.org
+  to:
+    kind: Service
+    name: shroff-data
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+

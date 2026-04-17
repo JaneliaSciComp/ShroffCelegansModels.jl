@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: shroff-data-test
+data:
+  default.conf: |
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
+    server {
+        listen 8080;
+        server_name shroff-data-test.int.janelia.org;
+
+        # Static files baked into the Julia image (shared via emptyDir or same image)
+        # HDF5 data files served from CephFS PVC at /var/www/shroff/data/
+        root /app/ShroffCelegansModels.jl/web/static;
+        index index.html;
+
+        location / {
+        }
+
+        location /data/ {
+            alias /var/www/shroff/data/;
+            autoindex on;
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' always;
+            add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range' always;
+            if ($request_method = 'OPTIONS') {
+                add_header 'Access-Control-Max-Age' 1728000;
+                add_header 'Content-Type' 'text/plain; charset=utf-8';
+                add_header 'Content-Length' 0;
+                return 204;
+            }
+        }
+
+        location /show_average_annotations/ {
+            proxy_pass http://localhost:8180/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /meshscatter_average_edited/ {
+            proxy_pass http://localhost:8580/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /meshscatter_average_edited_2024_10_24/ {
+            proxy_pass http://localhost:8590/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /debug_annotation_ap_axis/ {
+            proxy_pass http://localhost:9180/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /debug_annotation_ap_axis_live/ {
+            proxy_pass http://localhost:9181/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /debug_annotation_ap_axis_retrack_live/ {
+            proxy_pass http://localhost:9281/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
+        location /fix_annotation_ap_axis/ {
+            proxy_pass http://localhost:9381/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+    }

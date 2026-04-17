@@ -1,0 +1,286 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shroff-data
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shroff-data
+  template:
+    metadata:
+      labels:
+        app: shroff-data
+    spec:
+      initContainers:
+        # Copy static web files from the Julia image into a shared emptyDir so nginx
+        # (nginx:alpine, no Julia) can serve them without needing the full Julia image.
+        - name: copy-static
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command: ["cp", "-r", "/app/ShroffCelegansModels.jl/web/static/.", "/static/"]
+          volumeMounts:
+            - name: static-files
+              mountPath: /static
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: www-data
+              mountPath: /var/www/shroff/data
+            - name: static-files
+              mountPath: /app/ShroffCelegansModels.jl/web/static
+              readOnly: true
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # Julia web apps — code and precompiled packages baked into the image.
+        # Only /nearline/shroff NFS mount needed for microscopy data.
+        # startupProbe allows up to 20 min (safety net; should start fast with precompiled image).
+
+        - name: show-average-annotations
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_show_average_annotations.jl
+          ports:
+            - containerPort: 8180
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 4Gi
+              cpu: 250m
+            limits:
+              memory: 4Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 8180
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: meshscatter-average-edited
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited.jl
+          ports:
+            - containerPort: 8580
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 8580
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: meshscatter-2024-10-24
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited_2024_10_24.jl
+          ports:
+            - containerPort: 8590
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 8590
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: debug-ap-axis
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis.jl
+          ports:
+            - containerPort: 9180
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 9180
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: debug-ap-axis-live
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_live.jl
+          ports:
+            - containerPort: 9181
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 9181
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: debug-ap-axis-retrack-live
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_retrack_live.jl
+          ports:
+            - containerPort: 9281
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 9281
+            failureThreshold: 10
+            periodSeconds: 30
+
+        - name: fix-ap-axis
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_fix_annotation_ap_axis.jl
+          ports:
+            - containerPort: 9381
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 9381
+            failureThreshold: 10
+            periodSeconds: 30
+
+      volumes:
+        - name: static-files
+          emptyDir: {}
+        - name: www-data
+          persistentVolumeClaim:
+            claimName: shroff-data-www
+        - name: nearline
+          persistentVolumeClaim:
+            claimName: shroff-data-nearline
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shroff-data
+  namespace: shroff-data
+spec:
+  selector:
+    app: shroff-data
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
