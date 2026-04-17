@@ -88,8 +88,7 @@ end
 
 if gethostname() == "KITTISOPIKULM-2"
     alias_cache("X")
-elseif gethostname() == "vm7249"
-    # shroff-data.int.janelia.org
+else
     alias_cache_unix("/nearline/shroff")
 end
 

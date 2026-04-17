@@ -25,9 +25,9 @@ function meshscatter_average_webapp()
             black_body(meshscatter_average(average_annotation_dict; nerve_ring=true))
         end
     end
-    shroff_data_ip = Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string
+    shroff_data_ip = "0.0.0.0"
     server = Server(app, shroff_data_ip, 8590;
-        proxy_url="https://shroff-data.int.janelia.org/meshscatter_average_edited_2024_10_24/"
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/meshscatter_average_edited_2024_10_24/"
     )
     route!(server, "/nerve_ring" => nerve_ring_app)
     return server
