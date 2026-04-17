@@ -1,7 +1,7 @@
 name = "ShroffCelegansModels"
 uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
-authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 version = "1.0.0-DEV"
+authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 
 [deps]
 BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
@@ -40,7 +40,7 @@ TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 BSplineKit = "0.18, 0.19"
 Dates = "1"
 GeometryBasics = "0.4.11, 0.5"
-HDF5 = "0.17.2"
+HDF5 = "0.17.2, 0.18"
 Interpolations = "0.15, 0.16"
 Makie = "0.24.6"
 ProgressMeter = "1"
