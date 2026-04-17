@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY ShroffCelegansModels.jl /app/ShroffCelegansModels.jl
+COPY . /app/ShroffCelegansModels.jl
 
 # Precompile all packages (including local ShroffCelegansModels dep).
 # Build takes ~15-30 min; container startup is fast thereafter.

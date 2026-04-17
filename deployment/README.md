@@ -1,60 +1,63 @@
 # shroff-data — Container Build & Deployment Package
 
 This directory contains everything needed to rebuild the shroff-data container image
-and deploy it on OpenShift. The `ShroffCelegansModels.jl/` source here is the **patched version**
-already running in production — see "What was changed" below.
+and deploy it on OpenShift. The source is the `ShroffCelegansModels.jl` repo itself —
+all patches previously applied in the separate build package have been merged back in.
 
 ## Directory contents
 
 ```
-shroff-data-for-mark/
-├── README.md                  # This file
-├── Dockerfile                 # Builds the Julia image
-├── ShroffCelegansModels.jl/   # Patched source (ready to build from)
-├── shroff-data/               # K8s manifests — production namespace (shroff-data.int.janelia.org)
-│   ├── 00-namespace.yaml
-│   ├── 01-configmap.yaml
-│   ├── 02-pvc.yaml
-│   ├── 03-deployment.yaml
-│   ├── 04-route.yaml
-│   ├── 05-buildconfig.yaml    ← BuildConfig is also here, inside the full manifest set
-│   └── 06-scc.yaml
-└── shroff-data-test/          # K8s manifests — test namespace (shroff-data-test.int.janelia.org)
-    ├── 00-namespace.yaml
-    ├── 01-configmap.yaml
-    ├── 02-pvc.yaml
-    ├── 03-deployment.yaml
-    ├── 04-route.yaml
-    ├── 05-buildconfig.yaml
-    └── 06-scc.yaml
+ShroffCelegansModels.jl/           # Repo root — also the Docker build context
+├── deployment/
+│   ├── README.md                  # This file
+│   ├── Dockerfile                 # Builds the Julia image
+│   ├── shroff-data/               # K8s manifests — production namespace (shroff-data.int.janelia.org)
+│   │   ├── 00-namespace.yaml
+│   │   ├── 01-configmap.yaml
+│   │   ├── 02-pvc.yaml
+│   │   ├── 03-deployment.yaml
+│   │   ├── 04-route.yaml
+│   │   ├── 05-buildconfig.yaml
+│   │   └── 06-scc.yaml
+│   └── shroff-data-test/          # K8s manifests — test namespace (shroff-data-test.int.janelia.org)
+│       ├── 00-namespace.yaml
+│       ├── 01-configmap.yaml
+│       ├── 02-pvc.yaml
+│       ├── 03-deployment.yaml
+│       ├── 04-route.yaml
+│       ├── 05-buildconfig.yaml
+│       └── 06-scc.yaml
 ```
+
+All `oc` commands below must be run from the **repo root** (`ShroffCelegansModels.jl/`),
+which is the Docker build context.
 
 ## Deploying from scratch
 
 ### Production namespace (`shroff-data`)
 
 ```bash
-oc apply -f shroff-data/00-namespace.yaml
-oc apply -f shroff-data/06-scc.yaml
-oc apply -f shroff-data/05-buildconfig.yaml
+oc apply -f deployment/shroff-data/00-namespace.yaml
+oc apply -f deployment/shroff-data/06-scc.yaml
+oc apply -f deployment/shroff-data/05-buildconfig.yaml
 oc start-build shroff-data --from-dir=. -n shroff-data --follow
-oc apply -f shroff-data/01-configmap.yaml
-oc apply -f shroff-data/02-pvc.yaml
-oc apply -f shroff-data/03-deployment.yaml
-oc apply -f shroff-data/04-route.yaml
+oc apply -f deployment/shroff-data/01-configmap.yaml
+oc apply -f deployment/shroff-data/02-pvc.yaml
+oc apply -f deployment/shroff-data/03-deployment.yaml
+oc apply -f deployment/shroff-data/04-route.yaml
 ```
 
 ### Test namespace (`shroff-data-test`)
 
 ```bash
-oc apply -f shroff-data-test/00-namespace.yaml
-oc apply -f shroff-data-test/06-scc.yaml
-oc apply -f shroff-data-test/05-buildconfig.yaml
+oc apply -f deployment/shroff-data-test/00-namespace.yaml
+oc apply -f deployment/shroff-data-test/06-scc.yaml
+oc apply -f deployment/shroff-data-test/05-buildconfig.yaml
 oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
-oc apply -f shroff-data-test/01-configmap.yaml
-oc apply -f shroff-data-test/02-pvc.yaml
-oc apply -f shroff-data-test/03-deployment.yaml
-oc apply -f shroff-data-test/04-route.yaml
+oc apply -f deployment/shroff-data-test/01-configmap.yaml
+oc apply -f deployment/shroff-data-test/02-pvc.yaml
+oc apply -f deployment/shroff-data-test/03-deployment.yaml
+oc apply -f deployment/shroff-data-test/04-route.yaml
 ```
 
 The build takes ~15-30 minutes (Julia precompiles all packages).
@@ -62,7 +65,7 @@ The running pod restarts automatically once the new image is pushed.
 
 ## Rebuilding after a code update
 
-Update the source in `ShroffCelegansModels.jl/`, then trigger a new build in whichever namespace you want to update:
+Commit your changes, then trigger a new build from the repo root:
 
 ```bash
 # Production
@@ -81,82 +84,54 @@ oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
 
 ---
 
-## What was changed from the original source
+## Patches merged into the repo
 
-Four changes were needed to make the code work in a container.
-**Please consider merging these back into your repo** so future builds are clean.
-
----
+These four changes were previously applied to a separate build copy and have since been
+merged back into the repo. They are noted here for reference.
 
 ### 1. `src/demo_averaging/loading.jl` — config_path fallback
 
-Your code only defines `config_path` for hostnames `"vm7249"` and `"KITTISOPIKULM-2"`.
-A container has a random pod name, so `config_path` was never set and the app crashed.
-
-Added an `else` branch using `@__DIR__` (works anywhere, not hostname-dependent):
+Added an `else` branch so the config path resolves correctly in containers (which have
+random pod names, not the expected hostnames):
 
 ```julia
-# Add this else branch:
 else
-    const config_path = joinpath(@__DIR__, "..", "..", "config_2024_09_05_v1.json")
+    const config_path = joinpath(@__DIR__, "..", "..", "config", "linux", "config_2026_03_19_v2.json")
 end
 ```
 
----
-
 ### 2. `scripts/launch_show_average_annotations.jl` — NFS alias fallback
 
-`alias_cache_unix("/nearline/shroff")` was only called for hostname `"vm7249"`.
-Added an `else` branch so it always runs in containers:
+Added an `else` branch so `alias_cache_unix("/nearline/shroff")` always runs in containers:
 
 ```julia
-# Add this else branch:
 else
     alias_cache_unix("/nearline/shroff")
 end
 ```
 
----
+### 3. `web/scripts/*.jl` — bind address
 
-### 3. `web/scripts/*.jl` — bind address (all 7 scripts)
+Changed HTTP server bind address from `Sockets.getaddrinfo("shroff-data.int.janelia.org")`
+to `"0.0.0.0"` so it binds to a local interface inside the container.
 
-Scripts were binding the HTTP server to `Sockets.getaddrinfo("shroff-data.int.janelia.org")`.
-In a container that resolves to the load balancer IP (not a local interface), so the server crashed.
+### 4. `web/scripts/*.jl` — WebSocket proxy URL
 
-Change to `"0.0.0.0"` in all 7 scripts:
-
-```julia
-# Before:
-Server(app, Sockets.getaddrinfo("shroff-data.int.janelia.org") |> string, 8180; ...)
-# After:
-Server(app, "0.0.0.0", 8180; ...)
-```
-
----
-
-### 4. `web/scripts/*.jl` — WebSocket proxy URL (all 7 scripts)
-
-Bonito's `proxy_url` was hardcoded to `https://shroff-data.int.janelia.org/...`.
-This tells the browser where to connect for WebSockets — it needs to match whatever
-hostname the user is actually visiting (test route vs production).
-
-Change to read from an environment variable:
+Changed Bonito's `proxy_url` from a hardcoded hostname to read from an environment variable,
+allowing the same image to serve both production and test:
 
 ```julia
-# Before:
-proxy_url="https://shroff-data.int.janelia.org/show_average_annotations/"
-# After:
 proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/show_average_annotations/"
 ```
 
-The container sets `SHROFF_HOST` automatically from the deployment manifest. You don't need to set it yourself.
+`SHROFF_HOST` is set automatically by the deployment manifest.
 
 ---
 
 ## Accessing HDF5 data files on the server
 
-The HDF5 data files (previously at `/var/www/shroff/data/` on vm7249) are stored on a
-persistent volume mounted at `/var/www/shroff/data` inside the nginx container.
+The HDF5 data files are stored on a persistent volume mounted at `/var/www/shroff/data`
+inside the nginx container.
 
 ### Get a shell to browse or edit files
 

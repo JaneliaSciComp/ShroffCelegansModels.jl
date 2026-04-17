@@ -10,7 +10,7 @@ spec:
   strategy:
     type: Docker
     dockerStrategy:
-      dockerfilePath: Dockerfile
+      dockerfilePath: deployment/Dockerfile
   output:
     to:
       kind: ImageStreamTag
