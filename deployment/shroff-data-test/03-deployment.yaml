@@ -60,6 +60,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_show_average_annotations.jl
           ports:
@@ -89,6 +90,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited.jl
           ports:
@@ -118,6 +120,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited_2024_10_24.jl
           ports:
@@ -147,6 +150,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis.jl
           ports:
@@ -176,6 +180,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_live.jl
           ports:
@@ -205,6 +210,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_retrack_live.jl
           ports:
@@ -234,6 +240,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_fix_annotation_ap_axis.jl
           ports:
