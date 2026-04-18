@@ -2,6 +2,9 @@ using Dates
 using Printf
 using ShroffCelegansModels.HDF5
 
+# needs modelio.jl
+include("demo_averaging/modelio.jl")
+
 avg_models_filename() = "celegans_avg_models_" * Dates.format(now(), "yyyy_mm_dd") * ".h5"
 
 function save_avg_models(avg_models_filename = avg_models_filename(), avg_models = avg_models, offset = 0)
@@ -28,10 +31,10 @@ end
 
 function save_measurements(avg_models_filename = avg_models_filename())
     h5open(avg_models_filename) do h5f
-        attrs(h5f)["voxel_pitch_micrometers"] = 0.165
-        h5f["measurements/volume"] = ShroffCelegansModels.volume_by_cross_section.(avg_models) .* 0.165^3
+        attrs(h5f)["voxel_pitch_micrometers"] = 0.1625
+        h5f["measurements/volume"] = ShroffCelegansModels.volume_by_cross_section.(avg_models) .* 0.1625^3
         get_length(model) = ShroffCelegansModels.central_spline(model)(1.0)[3]
-        h5f["measurements/length"] = get_length.(avg_models) .* 0.165
+        h5f["measurements/length"] = get_length.(avg_models) .* 0.1625
         attrs(h5f["measurements/volume"])["units"] = "micrometers^3"
         attrs(h5f["measurements/length"])["units"] = "micrometers"
     end

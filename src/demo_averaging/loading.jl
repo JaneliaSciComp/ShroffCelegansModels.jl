@@ -7,7 +7,7 @@ end
 const voxel_size = 0.1625 # um
 
 using LinearAlgebra
-using JSON3
+using ShroffCelegansModels.JSON3
 LinearAlgebra.BLAS.set_num_threads(12)
 
 @info "Reading Config JSON"

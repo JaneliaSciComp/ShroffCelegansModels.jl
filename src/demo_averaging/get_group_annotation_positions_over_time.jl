@@ -1,3 +1,5 @@
+using ShroffCelegansModels: CelegansModel, Datasets
+
 include("transform_annotations.jl")
 
 function get_datasets_info(datasets)

@@ -15,7 +15,10 @@ function fix_annotation_ap_axis(
     dataset::ShroffCelegansModels.Datasets.NormalizedDataset;
     use_myuntwist::Bool = false,
     cache::Dict{String} = use_myuntwist ? my_annotation_position_cache : annotation_position_cache,
-    ip_address::Sockets.IPAddr = Sockets.getipaddr()
+    ip_address::Sockets.IPAddr = Sockets.getipaddr(),
+    initial_timepoint::Number = 0.0,
+    initial_annotation::Union{String, Nothing} = nothing,
+    annotation_timepoint_listener::Union{Function, Nothing} = nothing,
 )
     second(x) = x[2]
 
@@ -208,7 +211,14 @@ function fix_annotation_ap_axis(
 
     # annotation_menu = Menu(f[6, 1:2], options = twisted_annotation_text)
     menu_options = sort!(collect(values(dataset.cell_key.mapping)))
-    annotation_menu = Menu(f[6, 1:2], options = menu_options)
+
+    # Check if initial annotation is in menu options
+    if !isnothing(initial_annotation) && !(initial_annotation in menu_options)
+        @error "Initial annotation $initial_annotation not found in menu options"
+        initial_annotation = first(menu_options)
+    end
+    annotation_menu = Menu(f[6, 1:2], options = menu_options, default = initial_annotation)
+    @info "initial annotation" initial_annotation menu_options
     initial_selected_idx = findfirst(==(first(menu_options)), twisted_annotation_text[])
     if isnothing(initial_selected_idx)
         @error "Could not locate first menu option in twisted_annotation_text" first(menu_options)
@@ -253,7 +263,7 @@ function fix_annotation_ap_axis(
     text!(ax_twisted, twisted_seam_cell_labels; text = twisted_seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax_twisted, twisted_annotation_cells; text = twisted_annotation_text, align = (:right, :bottom))
     #connect!(ann_txt.visible, annotation_text_toggle.active)
-    annotation_text_toggle.active = false
+    ann_txt.visible = false
     on(annotation_text_toggle.active) do v
         ann_txt.visible = v
     end
@@ -360,6 +370,9 @@ function fix_annotation_ap_axis(
             nt_obs[] = nt
         end
         selected_z_position[] = z_positions[][value-first(cell_key_range)+1]
+        if !isnothing(annotation_timepoint_listener)
+            annotation_timepoint_listener(annotation_menu.selection[],value)
+        end
         @info "Timepoint slider" value
     end
 
@@ -505,6 +518,9 @@ function fix_annotation_ap_axis(
             catch err
                 @error "Could not get z_positions" err
             end
+            if !isnothing(annotation_timepoint_listener)
+                annotation_timepoint_listener(selected, timepoint_slider.value[])
+            end
         end
     end
 
@@ -608,6 +624,11 @@ function fix_annotation_ap_axis(
     end
 
     notify(annotation_menu.selection)
+
+    if !isnothing(initial_timepoint) && initial_timepoint != 0.0
+        set_close_to!(timepoint_slider, initial_timepoint)
+    end
+
     f
 end
 
