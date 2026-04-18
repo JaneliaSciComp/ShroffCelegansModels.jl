@@ -39,8 +39,8 @@ function web_debug_annotation_ap_axis(datasets = datasets)
                     avg_models,
                     datasets[k][i];
                     use_myuntwist=true,
-                    initial_timepoint=parse(Int64, get(params, "initial_timepoint", "0")),
-                    initial_annotation=get(params, "initial_annotation", nothing),
+                    initial_timepoint=parse(Int64, get(params, "timepoint", "0")),
+                    initial_annotation=get(params, "annotation", nothing),
                     annotation_timepoint_listener=listener
                 );
             end)
