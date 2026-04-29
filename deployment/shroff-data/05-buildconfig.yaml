@@ -11,6 +11,10 @@ spec:
     type: Docker
     dockerStrategy:
       dockerfilePath: deployment/Dockerfile
+      from:
+        kind: ImageStreamTag
+        name: shroff-data-base:latest
+        namespace: shroff-data
   output:
     to:
       kind: ImageStreamTag
