@@ -28,3 +28,11 @@ function load_straightened_annotations_over_time(
         return annotations
     end
 end
+
+function annotations_cache_key(
+    dataset::ShroffCelegansModels.Datasets.NormalizedDataset,
+    offsets = 1:length(range(dataset.cell_key)),
+    use_myuntwist = true
+)
+    return (dataset.path, offsets, use_myuntwist)
+end

@@ -56,7 +56,10 @@ function save_annotations_cache(annotations_cache = annotations_cache)
     end
 end
 
-function load_annotations_cache(annotations_cache = annotations_cache)
+function load_annotations_cache(
+    annotations_cache = annotations_cache;
+    filename = joinpath(@__DIR__, "..", "..", "annotations_cache.h5")
+)
     function _descend(p::Union{HDF5.File,HDF5.Group})
         for k in keys(p)
             _descend(p[k])
