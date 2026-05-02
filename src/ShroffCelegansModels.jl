@@ -28,6 +28,12 @@ module ShroffCelegansModels
     using StatsBase: StatsBase
     using ThinPlateSplines: ThinPlateSplines
     using TiffImages: TiffImages
+    if gethostname() == "KITTISOPIKULM-2"
+        const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
+    else
+        const config_path = joinpath(@__DIR__, "..", "..", "config", "linux", "config_2026_03_19_v2.json")
+    end
+    const voxel_size = 0.1625 # um
 
     include("datasets.jl")
     include("MIPAVIO.jl")   
@@ -57,6 +63,10 @@ module ShroffCelegansModels
 
     include("annotation_untwist.jl")
     include("parse_worm_dataset_path.jl")
+
+    include("demo_averaging/read_config_json.jl")
+    include("demo_averaging/fix_annotation_ap_axis.jl")
+    include("makie.jl")
 
     include("precompile.jl")
 

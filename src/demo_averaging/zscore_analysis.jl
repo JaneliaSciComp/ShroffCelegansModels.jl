@@ -27,6 +27,28 @@ function get_annotations_cache_keys(datasets::Dict{String, Dict{String, ShroffCe
     flatened_datasets = [dataset for group in values(datasets) for dataset in values(group)]
     dataset_keys = ShroffCelegansModels.annotations_cache_key.(flattened_datasets)
 end
+function raw_zscore_analysis(
+    datasets::Dict{String, Vector{ShroffCelegansModels.NormalizedDataset}};
+    threshold=1,
+    time_threshold=1
+)
+    for group in keys(datasets)
+        for embryo in keys(datasets[group])
+            dataset = datasets[group][embryo]
+            dict = raw_annotation_dict(dataset)
+            zscores = zscore(map(values(dict)) do timeseries
+                sqrt(sum(diff((x->x[3]).(skipmissing(timeseries))).^2))
+            end)
+            annotation_names = keys(dict)
+            for (annotation, zscore) in zip(annotation_names, zscores)
+                if zscore > threshold
+                    #println(group, ", ", embryo, ", ", annotation, ", ", zscore)
+                    dataset_to_links(datasets, group, embryo, time_threshold) .|> println
+                end
+            end
+        end
+    end
+end
 function raw_annotation_dict(dataset; use_myuntwist = true)
     straighted_annotations_over_time = ShroffCelegansModels.load_straightened_annotations_over_time(dataset; use_myuntwist)
     mapping = dataset.cell_key.mapping
