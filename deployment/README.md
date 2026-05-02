@@ -8,9 +8,11 @@ all patches previously applied in the separate build package have been merged ba
 
 ```
 ShroffCelegansModels.jl/           # Repo root — also the Docker build context
+├── .dockerignore                  # Excludes deployment/, backup_*/, cache_*/, services/
 ├── deployment/
 │   ├── README.md                  # This file
-│   ├── Dockerfile                 # Builds the Julia image
+│   ├── Dockerfile                 # App image — builds FROM the base image (~2 min)
+│   ├── Dockerfile.base            # Base image — installs deps & precompiles external packages (~7 min)
 │   ├── shroff-data/               # K8s manifests — production namespace (shroff-data.int.janelia.org)
 │   │   ├── 00-namespace.yaml
 │   │   ├── 01-configmap.yaml
@@ -26,15 +28,52 @@ ShroffCelegansModels.jl/           # Repo root — also the Docker build context
 │       ├── 03-deployment.yaml
 │       ├── 04-route.yaml
 │       ├── 05-buildconfig.yaml
+│       ├── 05b-buildconfig-base.yaml
 │       └── 06-scc.yaml
 ```
 
 All `oc` commands below must be run from the **repo root** (`ShroffCelegansModels.jl/`),
 which is the Docker build context.
 
+## Two-stage build
+
+The build is split into two images to keep routine deploys fast:
+
+| Image | Dockerfile | Build time | Rebuild when |
+|-------|-----------|------------|--------------|
+| `shroff-data-test-base` | `Dockerfile.base` | ~7 min | `Project.toml` or `Manifest.toml` changes |
+| `shroff-data-test` | `Dockerfile` | ~2 min | Any code change |
+
+`Dockerfile.base` installs system packages and precompiles all external Julia packages
+using a stub for the local `ShroffCelegansModels` package. `Dockerfile` builds `FROM`
+that base, copies the real source, and re-precompiles only the local package.
+
 ## Deploying from scratch
 
+### Test namespace (`shroff-data-test`)
+
+```bash
+oc apply -f deployment/shroff-data-test/00-namespace.yaml
+oc apply -f deployment/shroff-data-test/06-scc.yaml
+
+# Build the base image first (~7 min)
+oc apply -f deployment/shroff-data-test/05b-buildconfig-base.yaml
+oc start-build shroff-data-test-base --from-dir=. -n shroff-data-test --follow
+
+# Then build the app image (~2 min)
+oc apply -f deployment/shroff-data-test/05-buildconfig.yaml
+oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
+
+oc apply -f deployment/shroff-data-test/01-configmap.yaml
+oc apply -f deployment/shroff-data-test/02-pvc.yaml
+oc apply -f deployment/shroff-data-test/03-deployment.yaml
+oc apply -f deployment/shroff-data-test/04-route.yaml
+```
+
 ### Production namespace (`shroff-data`)
+
+> **Note:** The production namespace does not yet have a base image BuildConfig.
+> Use the single-stage build until it is set up (see test namespace as a reference).
 
 ```bash
 oc apply -f deployment/shroff-data/00-namespace.yaml
@@ -47,31 +86,25 @@ oc apply -f deployment/shroff-data/03-deployment.yaml
 oc apply -f deployment/shroff-data/04-route.yaml
 ```
 
-### Test namespace (`shroff-data-test`)
+## Rebuilding after a code update (~2 min)
+
+For routine code changes, only the app image needs to be rebuilt:
 
 ```bash
-oc apply -f deployment/shroff-data-test/00-namespace.yaml
-oc apply -f deployment/shroff-data-test/06-scc.yaml
-oc apply -f deployment/shroff-data-test/05-buildconfig.yaml
+# Test
 oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
-oc apply -f deployment/shroff-data-test/01-configmap.yaml
-oc apply -f deployment/shroff-data-test/02-pvc.yaml
-oc apply -f deployment/shroff-data-test/03-deployment.yaml
-oc apply -f deployment/shroff-data-test/04-route.yaml
-```
 
-The build takes ~15-30 minutes (Julia precompiles all packages).
-The running pod restarts automatically once the new image is pushed.
-
-## Rebuilding after a code update
-
-Commit your changes, then trigger a new build from the repo root:
-
-```bash
 # Production
 oc start-build shroff-data --from-dir=. -n shroff-data --follow
+```
 
+## Rebuilding after a dependency update (~7 + 2 min)
+
+When `Project.toml` or `Manifest.toml` changes, rebuild the base first, then the app:
+
+```bash
 # Test
+oc start-build shroff-data-test-base --from-dir=. -n shroff-data-test --follow
 oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
 ```
 

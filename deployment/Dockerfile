@@ -1,16 +1,11 @@
-FROM julia:1.12
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libhdf5-dev \
-    libgl1 \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Base image is overridden by each namespace's BuildConfig (dockerStrategy.from)
+FROM scratch
 
 COPY . /app/ShroffCelegansModels.jl
 
-# Precompile all packages (including local ShroffCelegansModels dep).
-# Build takes ~15-30 min; container startup is fast thereafter.
+# Re-precompile only the local package and anything that depends on it.
+# External deps are already precompiled in the base image.
 RUN julia --threads=auto --project=/app/ShroffCelegansModels.jl/web \
-    -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+    -e 'using Pkg; Pkg.precompile()'
 
 CMD ["julia", "--version"]
