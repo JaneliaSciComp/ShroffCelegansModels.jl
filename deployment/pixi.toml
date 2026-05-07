@@ -6,7 +6,7 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
-download-annotation-changes = { cmd = "oc cp -n shroff-data -c fix-ap-axis $(oc get pod -n shroff-data -l app=shroff-data -o jsonpath='{.items[0].metadata.name}'):/data/annotations/annotation_changes.h5 ../annotation_changes_$(date +%Y_%m_%d).h5" }
+download-annotation-changes = { cmd = "julia download_annotation_changes.jl" }
 
 [dependencies]
 openshift-cli = ">=4.20.2,<5"
