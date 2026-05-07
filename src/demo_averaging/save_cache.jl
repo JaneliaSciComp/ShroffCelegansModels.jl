@@ -26,9 +26,12 @@ function save_annotation_cache()
     end
 end
 
-function save_annotations_cache(annotations_cache = annotations_cache)
+function save_annotations_cache(
+    annotations_cache = annotations_cache;
+    filename = joinpath(@__DIR__, "..", "..", "annotations_cache.h5")
+)
     # annotations_cache
-    h5open("annotations_cache.h5", "w") do h5f
+    h5open(filename, "w") do h5f
         for (k,v) in annotations_cache
             _path, _range, _my_untwist = k
             parts = splitpath(_path)
@@ -117,7 +120,8 @@ function load_annotations_cache(
         data_cache[k2] = pt
         cache[idx] = data_cache
     end
-    h5open("annotations_cache.h5", "r") do h5f
+    @info "Loading annotations cache from $filename"
+    h5open(filename, "r") do h5f
         _descend(h5f)
     end
 

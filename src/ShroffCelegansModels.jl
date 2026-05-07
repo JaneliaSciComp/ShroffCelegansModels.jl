@@ -65,6 +65,9 @@ module ShroffCelegansModels
     include("parse_worm_dataset_path.jl")
 
     include("demo_averaging/read_config_json.jl")
+    # save_celegans_avg_models loads modelio
+    include("save_celegans_avg_models.jl")
+    include("demo_averaging/seam_cell_pts.jl")
     include("demo_averaging/fix_annotation_ap_axis.jl")
     include("makie.jl")
 

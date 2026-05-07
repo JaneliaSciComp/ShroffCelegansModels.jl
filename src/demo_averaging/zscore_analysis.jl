@@ -1,7 +1,8 @@
-using HDF5
-using StatsBase: zscore
-using DataFrames
-using CSV
+using ShroffCelegansModels.HDF5
+using ShroffCelegansModels.StatsBase: zscore
+using ShroffCelegansModels.DataFrames
+using ShroffCelegansModels.CSV
+using ShroffCelegansModels.GeometryBasics
 using Printf
 
 function zscore_analysis()
@@ -32,22 +33,36 @@ function raw_zscore_analysis(
     threshold=1,
     time_threshold=1
 )
-    for group in keys(datasets)
-        for embryo in keys(datasets[group])
+    d = map(collect(keys(datasets))) do group
+        group => map(collect(keys(datasets[group]))) do embryo
             dataset = datasets[group][embryo]
             dict = raw_annotation_dict(dataset)
-            zscores = zscore(map(values(dict)) do timeseries
-                sqrt(sum(diff((x->x[3]).(skipmissing(timeseries))).^2))
-            end)
-            annotation_names = keys(dict)
-            for (annotation, zscore) in zip(annotation_names, zscores)
-                if zscore > threshold
-                    #println(group, ", ", embryo, ", ", annotation, ", ", zscore)
-                    dataset_to_links(datasets, group, embryo, time_threshold) .|> println
-                end
-            end
+            map(collect(keys(dict))) do annotation
+                timeseries = dict[annotation]
+                annotation => sqrt(sum(diff((x->x[3]).(skipmissing(timeseries))).^2))
+            end |> Dict
         end
+    end |> Dict
+    flattened_dict = Dict(
+        (group,embyro,annotation) => value
+        for (group, embyros) in d
+            for (embyro,annotations) in pairs(embyros) 
+                for (annotation,value) in annotations
+    )
+    zscore_dict = Dict(keys(flattened_dict) .=> zscore(values(flattened_dict) |> collect))
+    filtered_zscore_dict = filter(zscore_dict) do (k, zscore)
+        zscore > threshold
     end
+    map(keys(filtered_zscore_dict) |> collect) do k
+        (group, embryo, annotation) = k
+        dataset = datasets[group][embryo]
+        dict = raw_annotation_dict(dataset)
+        timeseries = dict[annotation]
+        timepoint = find_max_diff_idx(timeseries) + dataset.cell_key.start - 1
+        # println(group, ", ", embryo, ", ", annotation, ", ", zscore, ", ", timepoint)
+        # get_fix_url(group, embryo, annotation, timepoint)
+        (;group, embryo, annotation, timepoint, zscore = zscore_dict[k], link = get_fix_url(group, embryo, annotation, timepoint))
+    end |> DataFrame
 end
 function raw_annotation_dict(dataset; use_myuntwist = true)
     straighted_annotations_over_time = ShroffCelegansModels.load_straightened_annotations_over_time(dataset; use_myuntwist)
@@ -63,33 +78,42 @@ function raw_annotation_dict(dataset; use_myuntwist = true)
 
     return Dict(values(mapping) .=> timeseries)
 end
+function find_max_diff_idx(timeseries::Vector{Union{Missing, Point3d}})
+    idx = [i for (i, point) in enumerate(timeseries) if !ismissing(point)]
+    delta = diff((x->x[3]).(skipmissing(timeseries)))
+    abs_delta = abs.(delta)
+    i_max = argmax(abs_delta)
+    if i_max == 1 || i_max == length(idx)
+        return idx[i_max]
+    end
+    if delta[i_max] > 0
+        if delta[i_max-1] < -delta[i_max]/2
+            return idx[i_max]
+        else
+            return idx[i_max+1]
+        end
+    else
+        if delta[i_max-1] > -delta[i_max]/2
+            return idx[i_max]
+        else
+            return idx[i_max+1]
+        end
+    end
+end
+function find_max_diff_idx(
+    dataset::ShroffCelegansModels.NormalizedDataset,
+    annotation::String,
+    dict::Dict{String, Vector{Union{Missing, Point3d}}} = raw_annotation_dict(dataset)
+)
+    find_max_diff_idx(dict[annotation]) + dataset.cell_key.start - 1
+end
 function zscore_dict(dataset; use_myuntwist = true)
     dict = raw_annotation_dict(dataset; use_myuntwist)
     zscores = zscore(map(values(dict)) do timeseries
         sqrt(sum(diff((x->x[3]).(skipmissing(timeseries))).^2))
     end)
     indices = map(values(dict)) do timeseries
-        idx = [i for (i, point) in enumerate(timeseries) if !ismissing(point)]
-        delta = diff((x->x[3]).(skipmissing(timeseries)))
-        abs_delta = abs.(delta)
-        i_max = argmax(abs_delta)
-        #return delta[i_max-1:i_max+1]
-        if i_max == 1 || i_max == length(idx)
-            return idx[i_max] + dataset.cell_key.start - 1
-        end
-        if delta[i_max] > 0
-            if delta[i_max-1] < -delta[i_max]/2
-                return idx[i_max] + dataset.cell_key.start - 1 
-            else
-                return idx[i_max+1] + dataset.cell_key.start - 1
-            end
-        else
-            if delta[i_max-1] > -delta[i_max]/2
-                return idx[i_max] + dataset.cell_key.start - 1
-            else
-                return idx[i_max+1] + dataset.cell_key.start - 1
-            end
-        end
+        find_max_diff_idx(timeseries) + dataset.cell_key.start - 1
     end
 
     return Dict(keys(dict) .=> zip(zscores, indices))
@@ -97,10 +121,7 @@ end
 function outlier_dict(dataset; use_myuntwist = true)
     dict = raw_annotation_dict(dataset; use_myuntwist)
     indices = map(values(dict)) do timeseries
-        idx = [i for (i, point) in enumerate(timeseries) if !ismissing(point)]
-        abs_delta = abs.(diff((x->x[3]).(skipmissing(timeseries))))
-        i_max = argmax(abs_delta)
-        return idx[i_max]
+        find_max_diff_idx(timeseries) + dataset.cell_key.start - 1
     end
     return Dict(keys(dict) .=> indices)
 end
