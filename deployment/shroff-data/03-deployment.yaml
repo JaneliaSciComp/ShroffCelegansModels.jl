@@ -242,10 +242,14 @@ spec:
           env:
             - name: SHROFF_HOST
               value: "shroff-data.int.janelia.org"
+            - name: ANNOTATION_CHANGES_PATH
+              value: /data/annotations/annotation_changes.h5
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            - name: annotations
+              mountPath: /data/annotations
           resources:
             requests:
               memory: 2Gi
@@ -268,6 +272,9 @@ spec:
         - name: nearline
           persistentVolumeClaim:
             claimName: shroff-data-nearline
+        - name: annotations
+          persistentVolumeClaim:
+            claimName: shroff-data-annotations
         - name: nginx-config
           configMap:
             name: nginx-config

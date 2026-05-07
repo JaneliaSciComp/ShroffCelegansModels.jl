@@ -30,6 +30,21 @@ spec:
     path: /nearline3/shroff
     readOnly: true
 ---
+---
+# CephFS PVC for annotation_changes.h5 (user edits that must survive pod restarts).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shroff-data-test-annotations
+  namespace: shroff-data-test
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ocs-storagecluster-cephfs
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

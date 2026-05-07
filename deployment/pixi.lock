@@ -1,0 +1,18 @@
+version: 6
+environments:
+  default:
+    channels:
+    - url: https://conda.anaconda.org/conda-forge/
+    options:
+      pypi-prerelease-mode: if-necessary-or-explicit
+    packages:
+      linux-64:
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/openshift-cli-4.20.2-hfc2019e_0.conda
+packages:
+- conda: https://conda.anaconda.org/conda-forge/linux-64/openshift-cli-4.20.2-hfc2019e_0.conda
+  sha256: 8ba453cb89a23fc27d8b712c406e7ad06ad9e65b2a9b6a11b6a5b91527a648fc
+  md5: cc15eeccba5b733052870c0f226dca18
+  license: Apache-2.0
+  license_family: APACHE
+  size: 107321457
+  timestamp: 1762191858837
