@@ -640,23 +640,6 @@ end
     original_position::Point3d
     new_position::Point3d
 end
-function AnnotationChange(;
-    ip_address::UInt64,
-    dataset_path::String,
-    annotation_name::String,
-    timepoint::Int,
-    original_position::Point,
-    new_z_position::Float64
-)
-    return AnnotationChange(
-        ip_address,
-        dataset_path,
-        annotation_name,
-        timepoint,
-        original_position,
-        Point3d(original_position[1], new_z_position, original_position[3])
-    )
-end
 function AnnotationChange(
     ip_address::UInt64,
     dataset_path::String,
