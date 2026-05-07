@@ -10,6 +10,8 @@ using ShroffCelegansModels.HDF5
 
 const ANNOTATION_PERSIST_SERVER_PORT = 3129
 
+annotation_changes_path() = get(ENV, "ANNOTATION_CHANGES_PATH", joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
+
 function fix_annotation_ap_axis(
     avg_models,
     dataset::ShroffCelegansModels.Datasets.NormalizedDataset;
@@ -477,7 +479,7 @@ function fix_annotation_ap_axis(
     common_annotations_text = _annotation_text
     @info common_annotations_text
 
-    h5open("annotation_changes.h5", "r", swmr=true) do h5f
+    h5open(annotation_changes_path(), "r", swmr=true) do h5f
         for time_idx in eachindex(cell_key_range)
             timepoint = cell_key_range[time_idx]
             for annotation_name in values(dataset.cell_key.mapping)
@@ -712,7 +714,7 @@ function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVE
                         c.annotation_name
                     )
                     @info "Group name for HDF5: $group_name"
-                    h5open("annotation_changes.h5", "cw", swmr=true) do h5f
+                    h5open(annotation_changes_path(), "cw", swmr=true) do h5f
                         if !haskey(h5f, group_name)
                             create_group(h5f, group_name)
                         end
@@ -791,7 +793,7 @@ function shutdown_server()
     close(s)
 end
 
-function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
+function load_annotation_changes_cache(filepath = annotation_changes_path())
     # changes = Dict{String,Pair{Vector{Point3{Float64}},Vector{Point3{Float64}}}}()
     changes = Dict{String,Pair{Point3{Float64},Point3{Float64}}}()
 
