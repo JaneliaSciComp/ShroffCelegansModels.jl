@@ -91,6 +91,15 @@ data:
             proxy_read_timeout 600s;
         }
 
+        location /zscore_analysis/ {
+            proxy_pass http://localhost:9300/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
+
         location /fix_annotation_ap_axis/ {
             proxy_pass http://localhost:9381/;
             proxy_http_version 1.1;

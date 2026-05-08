@@ -236,6 +236,63 @@ spec:
             failureThreshold: 10
             periodSeconds: 30
 
+        - name: debug-zscore
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+          command: ["sleep", "infinity"]
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data-test.int.janelia.org"
+            - name: ANNOTATION_CHANGES_PATH
+              value: /data/annotations/annotation_changes.h5
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+            - name: annotations
+              mountPath: /data/annotations
+          resources:
+            requests:
+              memory: 4Gi
+              cpu: 250m
+            limits:
+              memory: 8Gi
+              cpu: "2"
+
+        - name: zscore-analysis
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+          command:
+            - julia
+            - --threads=auto
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_zscore_analysis.jl
+          ports:
+            - containerPort: 9300
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data-test.int.janelia.org"
+            - name: ANNOTATION_CHANGES_PATH
+              value: /data/annotations/annotation_changes.h5
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+            - name: annotations
+              mountPath: /data/annotations
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 250m
+            limits:
+              memory: 3Gi
+              cpu: "2"
+          startupProbe:
+            tcpSocket:
+              port: 9300
+            failureThreshold: 10
+            periodSeconds: 30
+
         - name: fix-ap-axis
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
