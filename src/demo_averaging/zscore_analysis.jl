@@ -125,10 +125,10 @@ function outlier_dict(dataset; use_myuntwist = true)
     end
     return Dict(keys(dict) .=> indices)
 end
-const base_url = "https://shroff-data.int.janelia.org/fix_annotation_ap_axis/%s/%d?annotation=%s&timepoint=%d"
 function get_fix_url(group, group_idx, annotation, timepoint)
     return @sprintf(
-        "https://shroff-data.int.janelia.org/fix_annotation_ap_axis/%s/%d?annotation=%s&timepoint=%d",
+        "https://%s/fix_annotation_ap_axis/%s/%d?annotation=%s&timepoint=%d",
+        get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"),
         group,
         group_idx,
         annotation,

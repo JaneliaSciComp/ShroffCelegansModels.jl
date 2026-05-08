@@ -634,7 +634,7 @@ function fix_annotation_ap_axis(
     f
 end
 
-@kwdef struct AnnotationChange
+struct AnnotationChange
     ip_address::UInt64
     dataset_path::String
     annotation_name::String
@@ -642,15 +642,19 @@ end
     original_position::Point3d
     new_position::Point3d
 end
-function AnnotationChange(
+function AnnotationChange(;
     ip_address::UInt64,
     dataset_path::String,
     annotation_name::String,
     timepoint::Int,
     original_position::Point,
-    new_z_position::Float64
+    new_position::Union{Point, Nothing} = nothing,
+    new_z_position::Union{Float64, Nothing} = nothing,
 )
-    new_position = Point3d(original_position[1], new_z_position, original_position[3])
+    isnothing(new_position) && isnothing(new_z_position) && throw(ArgumentError("One of new_position or new_z_position must be provided"))
+    if isnothing(new_position)
+        new_position = Point3d(original_position[1], new_z_position, original_position[3])
+    end
     return AnnotationChange(
         ip_address,
         dataset_path,
@@ -868,17 +872,17 @@ function update_annotations_cache(
     annotations_cache_keys = keys(annotations_cache)
     key_map_dict = Dict(first.(annotations_cache_keys) .=> annotations_cache_keys)
     for (change_key, (old_pt, new_pt)) in annotations_changes
-        change_key_parts = splitpath(change_key)
+        change_key_parts = split(change_key, "\\")
         timepoint = tryparse(Int, change_key_parts[end-3])
         if isnothing(timepoint)
             # Case when annotation name does not contain a slash
             timepoint = parse(Int, change_key_parts[end-2])
-            dataset_path = joinpath(change_key_parts[begin:end-3])
+            dataset_path = join(change_key_parts[begin:end-3], "\\")
             annotation_name = change_key_parts[end-1]
         else
             # Case when annotation name contains a slash
             # timepoint is change_key_parts[end-3]
-            dataset_path = joinpath(change_key_parts[begin:end-4])
+            dataset_path = join(change_key_parts[begin:end-4], "\\")
             annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
         end
         # Could error if dataset_path is not in key_map_dict
@@ -887,10 +891,15 @@ function update_annotations_cache(
             continue
         end
         annotations_cache_key = key_map_dict[dataset_path]
-        dataset = ShroffCelegansModels.Dataset(dataset_path)
+        local_dataset_path = dataset_path
+        if Sys.isunix()
+            local_dataset_path = replace(local_dataset_path, raw"X:\\" => "/nearline/shroff/")
+            local_dataset_path = replace(local_dataset_path, "\\" => "/")
+        end
+        dataset = ShroffCelegansModels.Dataset(local_dataset_path)
         annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
         if isnothing(annotation_symbol)
-            @warn "Annotation $annotation_name not found in dataset $dataset_path, skipping change at timepoint $timepoint"
+            @warn "Annotation $annotation_name not found in dataset $local_dataset_path, skipping change at timepoint $timepoint"
             continue
         end
         # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range

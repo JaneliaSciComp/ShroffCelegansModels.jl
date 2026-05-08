@@ -98,8 +98,8 @@ function load_annotations_cache(
             P = parent(P)
         end
 
-        _paths[1] = _paths[1] * ":\\"
-        _path = joinpath(_paths...)
+        _paths[1] = _paths[1] * ":"
+        _path = join(_paths, "\\")
 
         data = d[]
         pt = Point3{Float64}(data)

@@ -89,7 +89,7 @@ end
 if gethostname() == "KITTISOPIKULM-2"
     alias_cache("X")
 else
-    alias_cache_unix("/nearline/shroff")
+    alias_cache_unix("/nearline/shroff/")
 end
 
 function main()

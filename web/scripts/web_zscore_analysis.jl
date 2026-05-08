@@ -21,7 +21,7 @@ function web_zscore_analysis(datasets = datasets)
         proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/zscore_analysis/"
     )
     route!(server, "/" => App(; title="Shroff C. elegans z-score analysis") do
-        df = raw_zscore_analysis(datasets)
+        df = raw_zscore_analysis(datasets; threshold=-Inf)
         sort!(df, :zscore, rev=true)
         select!(df, :, :link => ByRow(x->DOM.a(x; href=x)) => :link)
         table = Bonito.Table(df)
