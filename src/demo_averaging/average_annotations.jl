@@ -5,8 +5,8 @@ using CSV
 using DataFrames
 using HDF5
 
-include("get_group_annotation_positions_over_time.jl")
-using ShroffCelegansModels: CelegansModel, get_datasets_info
+# include("get_group_annotation_positions_over_time.jl")
+using ShroffCelegansModels: CelegansModel, get_datasets_info, get_group_annotation_positions_over_time, annotation_positions
 
 function average_annotations(
     datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};

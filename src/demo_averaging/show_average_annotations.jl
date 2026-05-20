@@ -3,8 +3,8 @@ using ShroffCelegansModels.Statistics: mean, var
 using ShroffCelegansModels.CoordinateTransformations
 using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
 
-include("../makie.jl")
-include("get_group_annotation_positions_over_time.jl")
+#include("../makie.jl")
+#include("get_group_annotation_positions_over_time.jl")
 
 function show_average_annotations(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
@@ -36,7 +36,7 @@ function show_average_annotations(
     ylims!(ax_2d_3, (0, 250))
     # xlabel!("Time (Normalized)")
    
-    N_timepoints = 200
+    N_timepoints = length(avg_models) - 1
     r = LinRange(0.0, 1.0, N_timepoints + 1)
     sliders = SliderGrid(f[4,1:3],
         (label="Time (Normalized)", range=r),
@@ -226,7 +226,7 @@ function show_average_annotations(
         end
     end # Vector{Vector{Dict{String, Point3{Float64}}}} # dataset, normalized time, name => position
     =#
-    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache)
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache, LinRange(0,1,length(avg_models)); avg_models)
 
     # averaging
     _annotation_positions_over_time = map(eachindex(r)) do j
@@ -462,7 +462,7 @@ function show_average_annotations(
 
     on(throttle(0.1, sliders.sliders[2].value)) do smooth_factor
         value = sliders.sliders[1].value[]
-        idx = round(Int, value*200 + 1)
+        idx = round(Int, value*N_timepoints + 1)
         smooth_factor_θ = sliders.sliders[3].value[]
         smooth_factor_z = sliders.sliders[4].value[]
         if smooth_factor > 0 || smooth_factor_θ > 0 || smooth_factor_z > 0

@@ -70,8 +70,8 @@ module ShroffCelegansModels
     include("demo_averaging/seam_cell_pts.jl")
     include("demo_averaging/fix_annotation_ap_axis.jl")
     include("demo_averaging/get_avg_models.jl")
-    include("demo_averaging/get_group_annotation_positions_over_time.jl")
     include("demo_averaging/transform_annotations.jl")
+    include("demo_averaging/get_group_annotation_positions_over_time.jl")
     include("demo_averaging/average_annotations.jl")
     include("makie.jl")
 

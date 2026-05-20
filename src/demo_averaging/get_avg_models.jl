@@ -33,7 +33,7 @@ function get_avg_models(n=201)
     end
     avg_models = Vector{typeof(first_avg_model)}(undef, length(r))
     avg_models[1] = first_avg_model
-    @showprogress desc="Averaging models..." Threads.@threads for i in eachindex(r)[2:end]
+    ProgressMeter.@showprogress desc="Averaging models..." Threads.@threads for i in eachindex(r)[2:end]
         nt = r[i]
         models = models_at_nt(nt) 
         models = filter(!isnothing, models)

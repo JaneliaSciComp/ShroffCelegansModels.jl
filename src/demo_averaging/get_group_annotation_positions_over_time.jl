@@ -1,7 +1,5 @@
 using ShroffCelegansModels: CelegansModel, Datasets
 
-include("transform_annotations.jl")
-
 function get_datasets_info(datasets)
     use_myuntwist = true
     datasets_info = map(datasets) do dataset
@@ -78,7 +76,7 @@ function get_group_annotation_positions_over_time(
         else
             #_annotation_positions_over_time = annotation_positions.((smts_nt,), (annotation_dict,), r)
             _annotation_positions_over_time = Vector{Vector{Point3{Float64}}}(undef, length(normalized_timepoints))
-            @showprogress Threads.@threads for i in eachindex(normalized_timepoints)
+            ProgressMeter.@showprogress Threads.@threads for i in eachindex(normalized_timepoints)
                 nt = normalized_timepoints[i]
                 _annotation_positions_over_time[i] = annotation_positions(smts_nt, annotation_dict, nt; avg_models)
             end

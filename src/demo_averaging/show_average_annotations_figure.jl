@@ -4,7 +4,8 @@ using CoordinateTransformations
 using FFTW: fftfreq, fft, ifft
 
 include("../makie.jl")
-include("get_group_annotation_positions_over_time.jl")
+# include("get_group_annotation_positions_over_time.jl")
+using ShroffCelegansModels: CelegansModel, get_datasets_info, get_group_annotation_positions_over_time, annotation_positions
 
 function yellow_figure(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
