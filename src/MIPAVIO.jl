@@ -12,6 +12,8 @@ module MIPAVIO
     using CSV: CSV
     using ShroffCelegansModels: Datasets
     using Statistics: mean
+    using Dates: DateTime, unix2datetime, TimeType
+    using HDF5: h5open, create_group, attrs
 
     export mipav_df_to_points, mipav_df_to_point_dict
 
@@ -62,7 +64,7 @@ module MIPAVIO
             return missing
         else
             filepath = joinpath(ds.path, "Decon_reg_$(timepoint)", "Decon_reg_$(timepoint)_results", data_path)
-            @info "Filepath" filepath
+            @debug "Filepath" filepath
             if isfile(filepath)
                 return filepath
             else
@@ -116,5 +118,84 @@ module MIPAVIO
             Dict(annotation_df[:,1] .=> pts)
         end
         return annotations
+    end
+
+    function get_modified_times_unix(dataset::Datasets.NormalizedDataset)::Vector{Float64}
+        map(1:length(range(dataset.cell_key))) do i
+            try
+                path = get_integrated_annotations_path(dataset, i)
+                ismissing(path) && return NaN
+                path_stat = stat(path)
+                path_stat.mtime
+            catch
+                NaN
+            end
+        end
+    end
+
+    function get_modified_times_unix(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}}
+    )::Dict{String,Vector{Vector{Float64}}}
+        Dict(k => get_modified_times_unix.(v) for (k,v) in datasets)
+    end
+
+    function save_modified_times_unix(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}},
+        modified_times::Dict{String,Vector{Vector{Float64}}} = get_modified_times_unix(datasets);
+        filepath::String
+    )
+        h5open(filepath, "w") do h5f
+            for group in keys(datasets)
+                h5g = create_group(h5f, group)
+                for (k,v) in pairs(modified_times[group])
+                    h5g[string(k)] = v
+                    A = attrs(h5f[group][string(k)])
+                    dataset = datasets[group][k]
+                    A["path"] = dataset.path
+                    A["cell_key.name"] = dataset.cell_key.name
+                    A["cell_key.start"] = dataset.cell_key.start
+                    A["cell_key.end"] = dataset.cell_key.stop
+                    A["cell_key.outliers"] = dataset.cell_key.outliers
+                end
+            end
+        end
+    end
+
+    function get_modified_times(dataset::Datasets.NormalizedDataset)::Vector{Union{Missing,DateTime}}
+        map(1:length(range(dataset.cell_key))) do i
+            path = get_integrated_annotations_path(dataset, i)
+            ismissing(path) && return missing
+            path_stat = stat(path)
+            unix2datetime(path_stat.mtime)
+        end
+    end
+
+    function get_last_modified_time(dataset::Datasets.NormalizedDataset)
+        mtimes = get_modified_times(dataset)
+        if all(ismissing, mtimes)
+            return missing
+        else
+            return maximum(skipmissing(mtimes))
+        end
+    end
+
+    function print_integrated_annotations_modified_since(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}},
+        since::TimeType;
+        modified_times = get_modified_times_unix(datasets)
+    )
+        for group in keys(modified_times)
+            for idx in keys(modified_times[group])
+                for tp in keys(modified_times[group][idx])
+                    ds = datasets[group][idx]
+                    u = modified_times[group][idx][tp]
+                    if !isnan(u) && unix2datetime(u) > since
+                        path = get_integrated_annotations_path(ds, idx)
+                        println(group, ", ", idx, ", ", tp, ", ", unix2datetime(u))
+                        # println(path)
+                    end
+                end
+            end
+        end
     end
 end

@@ -1,6 +1,3 @@
-using ShroffCelegansModels
-using ProgressMeter
-
 function get_avg_models(n=201)
     config_json, cell_keys, datasets = read_config_json()
 
@@ -44,14 +41,4 @@ function get_avg_models(n=201)
         avg_models[i] = ShroffCelegansModels.average(models; n_upsample = 2)
     end
     return avg_models
-
-    #=
-    avg_models = map(r) do nt
-        @info nt
-        models = models_at_nt(nt)
-        models = filter(!isnothing, models)
-        models = identity.(models)
-        ShroffCelegansModels.average(models; n_upsample = 2)
-    end
-    =#
 end
