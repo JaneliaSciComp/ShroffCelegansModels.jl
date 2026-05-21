@@ -2,6 +2,10 @@ using ShroffCelegansModels.ProgressMeter
 using ShroffCelegansModels.Statistics: mean, var
 using ShroffCelegansModels.CoordinateTransformations
 using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels: swapyz_scale, swapyz_unscale, transverse_splines
+using ShroffCelegansModels.ColorSchemes: colorschemes
+using ShroffCelegansModels.GeometryBasics: Point3, Point3f
+using ShroffCelegansModels.Observables: throttle
 
 #include("../makie.jl")
 #include("get_group_annotation_positions_over_time.jl")
