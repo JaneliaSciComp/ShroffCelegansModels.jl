@@ -293,6 +293,38 @@ spec:
             failureThreshold: 10
             periodSeconds: 30
 
+        - name: modified-times
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+          command:
+            - julia
+            - --threads=auto
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_modified_times.jl
+          ports:
+            - containerPort: 9400
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data-test.int.janelia.org"
+            - name: MODIFIED_TIMES_DIR
+              value: /data/annotations/modified_times
+          volumeMounts:
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+          startupProbe:
+            tcpSocket:
+              port: 9400
+            failureThreshold: 10
+            periodSeconds: 30
+
         - name: fix-ap-axis
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:

@@ -1,0 +1,62 @@
+# Daily snapshot of integrated_annotation CSV mtimes across all datasets.
+# Writes /data/annotations/modified_times/modified_times_YYYY_mm_dd_HHMMSS.h5
+# plus /data/annotations/modified_times/modified_times.h5 (latest) to the
+# shroff-data-test-annotations PVC.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: save-modified-times
+  namespace: shroff-data-test
+  labels:
+    app: shroff-data-test
+    component: save-modified-times
+spec:
+  schedule: "0 2 * * *"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: shroff-data-test
+            component: save-modified-times
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: save-modified-times
+              image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+              command:
+                - julia
+                - --threads=auto
+                - --project=/app/ShroffCelegansModels.jl/web
+                - /app/ShroffCelegansModels.jl/web/scripts/save_modified_times.jl
+              workingDir: /app/ShroffCelegansModels.jl
+              env:
+                - name: MODIFIED_TIMES_DIR
+                  value: /data/annotations/modified_times
+              volumeMounts:
+                - name: nearline
+                  mountPath: /nearline/shroff
+                  readOnly: true
+                - name: annotations
+                  mountPath: /data/annotations
+              resources:
+                requests:
+                  memory: 2Gi
+                  cpu: 250m
+                limits:
+                  memory: 4Gi
+                  cpu: "2"
+          volumes:
+            - name: nearline
+              persistentVolumeClaim:
+                claimName: shroff-data-test-nearline
+            - name: annotations
+              persistentVolumeClaim:
+                claimName: shroff-data-test-annotations

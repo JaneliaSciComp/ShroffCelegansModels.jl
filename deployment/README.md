@@ -35,6 +35,28 @@ ShroffCelegansModels.jl/           # Repo root — also the Docker build context
 All `oc` commands below must be run from the **repo root** (`ShroffCelegansModels.jl/`),
 which is the Docker build context.
 
+## Prerequisites: `oc` via pixi
+
+The OpenShift CLI is provided by [pixi](https://pixi.sh/) — see `deployment/pixi.toml`
+(`openshift-cli` from conda-forge). The system `PATH` does not include `oc`; invoke it
+through pixi instead.
+
+Pick one of the following:
+
+```bash
+# Option A — prefix every command (works from repo root)
+pixi run --manifest-path deployment/pixi.toml oc whoami
+
+# Option B — drop into a shell with oc on PATH
+cd deployment && pixi shell    # then `oc ...` works; `cd ..` back to repo root for builds
+
+# Option C — alias in your own shell
+alias oc='pixi run --manifest-path '"$PWD"'/deployment/pixi.toml oc'
+```
+
+The `oc` invocations in the rest of this README assume one of the above is in effect.
+Log in with `oc login ...` against the cluster before continuing.
+
 ## Two-stage build
 
 The build is split into two images to keep routine deploys fast:
