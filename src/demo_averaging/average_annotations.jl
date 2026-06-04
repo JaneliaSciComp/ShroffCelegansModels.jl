@@ -12,7 +12,8 @@ function average_annotations(
     datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
-    avg_models::Vector{<: CelegansModel} = avg_models
+    avg_models::Vector{<: CelegansModel} = avg_models,
+    use_cell_key_annotations_only = true
 )
     if isa(timepoints, Integer)
         N_timepoints = timepoints
@@ -27,7 +28,11 @@ function average_annotations(
 
     # common_annotations
     annotations = intersect(map(datasets_info) do dataset_info
-        collect(keys(dataset_info.annotation_dict))
+        dataset_annotations = collect(keys(dataset_info.annotation_dict))
+        if use_cell_key_annotations_only
+            dataset_annotations = filter(name -> name ∈ values(dataset_info.dataset.cell_key.mapping), dataset_annotations)
+        end
+        dataset_annotations
     end...)::Vector{String}
 
     positions = map(eachindex(first(group_annotation_positions_over_time))) do j
@@ -45,11 +50,11 @@ function average_annotations(
     datasets::Dict{String, Vector{ShroffCelegansModels.Datasets.NormalizedDataset}};
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
-    avg_models::Vector{<: CelegansModel} = avg_models
-
+    avg_models::Vector{<: CelegansModel} = avg_models,
+    use_cell_key_annotations_only = true
 )
     average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k    
-           average_annotations(datasets[k]; cache, timepoints, avg_models)
+           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only)
     end)
     return average_annotations_dict
 end

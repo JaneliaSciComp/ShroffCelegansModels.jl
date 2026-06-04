@@ -1,3 +1,5 @@
+using ShroffCelegansModels: seam_cell_pts
+
 function seam_cells_as_annotations(avg_models)
     seam_cell_names = [
         replace.(avg_models[1].names[1:2:end], "L" => "R");
