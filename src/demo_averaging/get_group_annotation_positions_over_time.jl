@@ -74,6 +74,7 @@ function get_group_annotation_positions_over_time(
     # guarded by a lock.
     out = Vector{Vector{Dict{String, Point3{Float64}}}}(undef, length(datasets_info))
     cache_lock = ReentrantLock()
+    prog = ProgressMeter.Progress(length(datasets_info); desc="Avg annotations / dataset...")
     Threads.@threads for ds_idx in eachindex(datasets_info)
         dataset_info = datasets_info[ds_idx]
         dataset = dataset_info.dataset
@@ -105,6 +106,8 @@ function get_group_annotation_positions_over_time(
                 Dict{String, Point3d}(keys(annotation_dict) .=> fill(Point3(NaN), length(keys(annotation_dict))))
             end
         end
+        ProgressMeter.next!(prog)
     end
+    ProgressMeter.finish!(prog)
     return out
 end
