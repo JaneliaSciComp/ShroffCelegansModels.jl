@@ -866,7 +866,7 @@ Returns
 - The updated `annotations_cache`.
 """
 function update_annotations_cache(
-    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
+    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, AnnotationsCacheValue},
     annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}};
     dry_run::Bool = false
 )
@@ -905,25 +905,26 @@ function update_annotations_cache(
         end
         # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
         timepoint = timepoint - dataset.cell_key.start + 1
-        if ismissing(annotations_cache[annotations_cache_key][timepoint])
+        cached_annotations = annotations_cache[annotations_cache_key].annotations
+        if ismissing(cached_annotations[timepoint])
             @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
             if !dry_run
-                annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
-                annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+                cached_annotations[timepoint] = Dict{String, Point3{Float64}}()
+                cached_annotations[timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
             end
         end
         # Check old_pt matches the cached point
         try
-            if !isapprox(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
-                _norm = norm(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
-                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
+            if !isapprox(cached_annotations[timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
+                _norm = norm(cached_annotations[timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
+                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(cached_annotations[timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
                 This may indicate the cache is out of sync with the changes, or the change does not apply cleanly to the current cache state. Consider reviewing this change and the current cache state to ensure consistency."""
             end
         catch e
             @warn "Error checking annotation point for $annotations_cache_key at timepoint $timepoint with annotation $annotation_symbol: $e"
         end
         if !dry_run
-            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+            cached_annotations[timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
         end
     end
     return annotations_cache

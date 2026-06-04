@@ -32,15 +32,15 @@ end
 
 using HDF5
 
-const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, Vector}()
 const annotation_position_cache = Dict{String, Any}()
-#const my_annotation_position_cache = Dict{String, Any}()
-const my_annotation_position_cache = Dict{String, Vector{Vector{Point3{Float64}}}}()
+
+# `annotations_cache` and `my_annotation_position_cache` are defined by
+# save_cache.jl (it owns the struct AnnotationsCacheValue used in the value
+# type), so include it before any code that references them.
+include("demo_averaging/save_cache.jl")
 
 include("demo_averaging/load_straightened_annotations_over_time.jl")
 include("demo_averaging/get_cell_trajectory_dict.jl")
-
-include("demo_averaging/save_cache.jl")
 
 # initialize my_annotation_position_cache
 try
