@@ -28,6 +28,9 @@ module ShroffCelegansModels
     using StatsBase: StatsBase
     using ThinPlateSplines: ThinPlateSplines
     using TiffImages: TiffImages
+
+    export get_avg_models
+
     if gethostname() == "KITTISOPIKULM-2"
         const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
     else

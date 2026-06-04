@@ -120,36 +120,100 @@ module MIPAVIO
         return annotations
     end
 
-    function get_modified_times_unix(dataset::Datasets.NormalizedDataset)::Vector{Float64}
+    # Generic per-timepoint mtime scanner. `path_builder(dataset, time_offset)`
+    # returns the file path(s) to stat for that timepoint — `String`, `Vector{String}`,
+    # `missing`, or empty. The returned mtime is the *max* across the listed paths
+    # (so a dataset's mtime advances when any of its inputs are touched). NaN if
+    # nothing stat-able.
+    #
+    # `path_builder` is the first argument so callers can use Julia do-block syntax:
+    #
+    #     _mtimes_unix(dataset) do ds, i
+    #         get_integrated_annotations_path(ds, i)
+    #     end
+    function _mtimes_unix(path_builder, dataset::Datasets.NormalizedDataset)::Vector{Float64}
         map(1:length(range(dataset.cell_key))) do i
             try
-                path = get_integrated_annotations_path(dataset, i)
-                ismissing(path) && return NaN
-                path_stat = stat(path)
-                path_stat.mtime
+                paths = path_builder(dataset, i)
+                ismissing(paths) && return NaN
+                if paths isa AbstractString
+                    return stat(paths).mtime
+                end
+                isempty(paths) && return NaN
+                maximum(stat(p).mtime for p in paths)
             catch
                 NaN
             end
         end
     end
 
-    function get_modified_times_unix(
-        datasets::Dict{String, Vector{Datasets.NormalizedDataset}}
-    )::Dict{String,Vector{Vector{Float64}}}
-        Dict(k => get_modified_times_unix.(v) for (k,v) in datasets)
+    # The lattice-related files consumed by `get_avg_models` for a single
+    # timepoint: `lattice_final/lattice.csv` plus every
+    # `model_crossSections/latticeCrossSection_*.csv`. Returns `missing` for
+    # outlier timepoints (no Decon_reg_$tp dir on disk) — same convention as
+    # `get_model_csv`. The cross-section dir may not exist on some datasets;
+    # in that case we just return the lattice file alone.
+    function _lattice_paths(ds::Datasets.NormalizedDataset, time_offset::Int)
+        timepoint = range(ds.cell_key)[time_offset]
+        timepoint ∈ ds.cell_key.outliers && return missing
+        base = joinpath(ds.path, "Decon_reg_$(timepoint)")
+        lattice = joinpath(base, "Decon_reg_$(timepoint)_results", "lattice_final", "lattice.csv")
+        cs_dir = joinpath(base, "model_crossSections")
+        cs_paths = if isdir(cs_dir)
+            joinpath.(cs_dir,
+                      filter(f -> startswith(f, "latticeCrossSection_") && endswith(f, ".csv"),
+                             readdir(cs_dir)))
+        else
+            String[]
+        end
+        return String[lattice; cs_paths...]
     end
 
+    get_annotation_modified_times_unix(dataset::Datasets.NormalizedDataset) =
+        _mtimes_unix(dataset) do d, i
+            get_integrated_annotations_path(d, i)
+        end
+
+    get_lattice_modified_times_unix(dataset::Datasets.NormalizedDataset) =
+        _mtimes_unix(_lattice_paths, dataset)
+
+    function get_annotation_modified_times_unix(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}}
+    )::Dict{String, Vector{Vector{Float64}}}
+        Dict(k => get_annotation_modified_times_unix.(v) for (k, v) in datasets)
+    end
+
+    function get_lattice_modified_times_unix(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}}
+    )::Dict{String, Vector{Vector{Float64}}}
+        Dict(k => get_lattice_modified_times_unix.(v) for (k, v) in datasets)
+    end
+
+    # Back-compat alias. Existing callers expecting "the annotation mtimes" keep
+    # working unchanged.
+    get_modified_times_unix(dataset::Datasets.NormalizedDataset) =
+        get_annotation_modified_times_unix(dataset)
+    get_modified_times_unix(datasets::Dict{String, Vector{Datasets.NormalizedDataset}}) =
+        get_annotation_modified_times_unix(datasets)
+
+    # Write a single kind's mtimes into an HDF5 group named `kind` (e.g.
+    # "annotation", "lattice"). Supports both fresh-file ("w") and append ("r+")
+    # modes via the `mode` arg so `save_all_modified_times_unix` can stack
+    # multiple kinds in one file.
     function save_modified_times_unix(
         datasets::Dict{String, Vector{Datasets.NormalizedDataset}},
-        modified_times::Dict{String,Vector{Vector{Float64}}} = get_modified_times_unix(datasets);
-        filepath::String
+        modified_times::Dict{String, Vector{Vector{Float64}}} = get_modified_times_unix(datasets);
+        filepath::String,
+        kind::String = "annotation",
+        mode::String = "w",
     )
-        h5open(filepath, "w") do h5f
+        h5open(filepath, mode) do h5f
+            kind_group = create_group(h5f, kind)
             for group in keys(datasets)
-                h5g = create_group(h5f, group)
-                for (k,v) in pairs(modified_times[group])
+                h5g = create_group(kind_group, group)
+                for (k, v) in pairs(modified_times[group])
                     h5g[string(k)] = v
-                    A = attrs(h5f[group][string(k)])
+                    A = attrs(h5g[string(k)])
                     dataset = datasets[group][k]
                     A["path"] = dataset.path
                     A["cell_key.name"] = dataset.cell_key.name
@@ -159,6 +223,19 @@ module MIPAVIO
                 end
             end
         end
+    end
+
+    # Convenience: scan both annotation and lattice mtimes and write them to a
+    # single file under top-level groups `annotation/` and `lattice/`. Used by
+    # the daily save-modified-times CronJob.
+    function save_all_modified_times_unix(
+        datasets::Dict{String, Vector{Datasets.NormalizedDataset}};
+        filepath::String,
+        annotation_mtimes::Dict{String, Vector{Vector{Float64}}} = get_annotation_modified_times_unix(datasets),
+        lattice_mtimes::Dict{String, Vector{Vector{Float64}}} = get_lattice_modified_times_unix(datasets),
+    )
+        save_modified_times_unix(datasets, annotation_mtimes; filepath, kind="annotation", mode="w")
+        save_modified_times_unix(datasets, lattice_mtimes;    filepath, kind="lattice",    mode="r+")
     end
 
     function get_modified_times(dataset::Datasets.NormalizedDataset)::Vector{Union{Missing,DateTime}}

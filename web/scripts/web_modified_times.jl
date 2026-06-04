@@ -21,9 +21,13 @@ end
 
 function read_modified_times(path::AbstractString)
     h5open(path, "r") do f
+        # Newer layout nests dataset groups under a kind group (e.g. `annotation/`,
+        # `lattice/`). This viewer focuses on annotation mtimes; fall back to the
+        # legacy flat layout if no kind group exists.
+        root = haskey(f, "annotation") ? f["annotation"] : f
         groups = Dict{String, Vector{DatasetEntry}}()
-        for group_name in keys(f)
-            g = f[group_name]
+        for group_name in keys(root)
+            g = root[group_name]
             indices = sort(parse.(Int, collect(keys(g))))
             entries = map(indices) do i
                 ds = g[string(i)]
