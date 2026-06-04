@@ -28,6 +28,7 @@ spec:
             component: save-modified-times
         spec:
           restartPolicy: Never
+          serviceAccountName: save-modified-times
           containers:
             - name: save-modified-times
               image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
@@ -40,6 +41,21 @@ spec:
               env:
                 - name: MODIFIED_TIMES_DIR
                   value: /data/annotations/modified_times
+                # Enable diff + Job dispatch when an mtime advances.
+                - name: DISPATCH_RECOMPUTE_JOB
+                  value: "true"
+                # Skip TLS verification for the in-cluster API server only.
+                # The bearer token authenticates us; the endpoint is reachable
+                # only via cluster networking.
+                - name: JULIA_SSL_NO_VERIFY_HOSTS
+                  value: kubernetes.default.svc
+                # Stub recompute Job spec — the real pipeline (steps 1–6)
+                # lands in a follow-up. For now we just prove the dispatch
+                # path works.
+                - name: RECOMPUTE_JOB_IMAGE
+                  value: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+                - name: RECOMPUTE_JOB_COMMAND
+                  value: '["julia","--version"]'
               volumeMounts:
                 - name: nearline
                   mountPath: /nearline/shroff

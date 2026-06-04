@@ -1,0 +1,43 @@
+# RBAC for the save-modified-times CronJob to dispatch a one-shot recompute Job
+# when it detects integrated_annotation mtime changes.
+#
+# Scope: namespaced. Grants only what's needed to create+list+get jobs in this
+# namespace. No cluster-wide permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: save-modified-times
+  namespace: shroff-data-test
+  labels:
+    app: shroff-data-test
+    component: save-modified-times
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: save-modified-times-dispatcher
+  namespace: shroff-data-test
+  labels:
+    app: shroff-data-test
+    component: save-modified-times
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: save-modified-times-dispatcher
+  namespace: shroff-data-test
+  labels:
+    app: shroff-data-test
+    component: save-modified-times
+subjects:
+  - kind: ServiceAccount
+    name: save-modified-times
+    namespace: shroff-data-test
+roleRef:
+  kind: Role
+  name: save-modified-times-dispatcher
+  apiGroup: rbac.authorization.k8s.io
