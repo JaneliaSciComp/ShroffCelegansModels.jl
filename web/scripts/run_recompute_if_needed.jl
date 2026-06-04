@@ -10,17 +10,13 @@ Pattern: filesystem marker on the shared annotations PVC.
 Flow:
   1. If marker is absent, exit 0 (nothing to do — most invocations).
   2. If marker is present, read it (logged for traceability), run the recompute
-     pipeline.
+     pipeline via `ShroffCelegansModels.run_recompute_pipeline()`.
   3. On success, delete the marker. On failure, leave the marker so the next
      invocation retries.
-
-The pipeline itself is currently a STUB (logs the marker contents and exits
-successfully). Steps 1–6 of the recompute (get_avg_models → average_annotations
-→ load_annotation_changes_cache → update_annotations_cache → write averaged
-HDF5 → export DataFrame) land in a follow-up.
 """
 
 using Dates: now, format
+using ShroffCelegansModels
 using ShroffCelegansModels.JSON3
 
 const MARKER_NAME = "pending_recompute"
@@ -30,10 +26,15 @@ function read_marker(path::AbstractString)
     return JSON3.read(read(path, String))
 end
 
-# STUB. Replace this with the real pipeline (steps 1–6) when it's ready.
 function run_pipeline(marker)
-    @info "[STUB] Would run recompute pipeline" marker
-    @info "[STUB] Pretending pipeline succeeded"
+    kinds = if haskey(marker, :kinds)
+        String[String(k) for k in marker[:kinds]]
+    else
+        # Legacy markers from the prior slice didn't carry `kinds`. Assume both.
+        ["annotation", "lattice"]
+    end
+    result = ShroffCelegansModels.run_recompute_pipeline(; kinds = kinds)
+    @info "Pipeline produced artifacts" result
     return true
 end
 
