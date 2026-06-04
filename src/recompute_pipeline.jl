@@ -70,6 +70,18 @@ function run_recompute_pipeline(;
     ts = format(now(), "yyyy_mm_dd_HHMMSS")
     @info "Pipeline starting" config_path output_dir n_timepoints kinds
 
+    # Clear pre-loaded caches before doing anything else. parse_worm_dataset_path.jl
+    # populates `annotations_cache` and `my_annotation_position_cache` at module
+    # init from baked-in HDF5 snapshots (annotations_cache.h5 +
+    # my_annotation_position_cache.h5). Those snapshots are stale relative to
+    # /nearline — the whole point of this pipeline is to recompute against
+    # current disk state, so we must blow away the pre-loaded entries first.
+    # Without this, the priming step and average_annotations would short-circuit
+    # on `haskey(cache, ...)` and return stale data.
+    @info "Clearing pre-loaded caches before recompute"
+    empty!(ShroffCelegansModels.annotations_cache)
+    empty!(ShroffCelegansModels.my_annotation_position_cache)
+
     # 1. Load datasets.
     @info "[1/8] Loading datasets" config_path
     _, _, datasets = read_config_json(config_path)
