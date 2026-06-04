@@ -1,7 +1,7 @@
 name = "ShroffCelegansModels"
 uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
-authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 version = "1.0.0-DEV"
+authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 
 [deps]
 BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
@@ -44,8 +44,8 @@ ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
-[sources]
-ThinPlateSplines = {url = "https://github.com/mkitti/ThinPlateSplines.jl"}
+[sources.ThinPlateSplines]
+url = "https://github.com/mkitti/ThinPlateSplines.jl"
 
 [compat]
 BSplineKit = "0.17, 0.18, 0.19"
@@ -54,12 +54,12 @@ CircStats = "1"
 ColorSchemes = "3"
 Colors = "0.12, 0.13"
 CoordinateTransformations = "0.6"
-Dates = "1"
 DataFrames = "1"
+Dates = "1"
 FFTW = "1"
 FileIO = "1"
-FixedPointNumbers = "0.8"
 FiniteDifferences = "0.12"
+FixedPointNumbers = "0.8, 0.9"
 GeometryBasics = "0.4, 0.5"
 HDF5 = "0.17"
 ImageContrastAdjustment = "0.3"
