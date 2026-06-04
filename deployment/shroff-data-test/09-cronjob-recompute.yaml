@@ -43,6 +43,11 @@ spec:
               env:
                 - name: MODIFIED_TIMES_DIR
                   value: /data/annotations/modified_times
+                # Test-cluster validation uses a reduced timepoint count.
+                # Production-grade output expects 371. Override at the env
+                # level (here) when you want a different N for a manual run.
+                - name: N_TIMEPOINTS
+                  value: "51"
               volumeMounts:
                 - name: nearline
                   mountPath: /nearline/shroff

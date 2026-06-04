@@ -33,7 +33,11 @@ function run_pipeline(marker)
         # Legacy markers from the prior slice didn't carry `kinds`. Assume both.
         ["annotation", "lattice"]
     end
-    result = ShroffCelegansModels.run_recompute_pipeline(; kinds = kinds)
+    # N_TIMEPOINTS env override lets the test CronJob run a faster validation
+    # (e.g. N_TIMEPOINTS=51) without changing source defaults. Production uses
+    # 371 (or whatever the deployment sets).
+    n_timepoints = parse(Int, get(ENV, "N_TIMEPOINTS", "371"))
+    result = ShroffCelegansModels.run_recompute_pipeline(; kinds = kinds, n_timepoints)
     @info "Pipeline produced artifacts" result
     return true
 end
