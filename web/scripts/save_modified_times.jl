@@ -29,7 +29,7 @@ the marker and runs the recompute pipeline.
 """
 
 using Dates: now, format
-using HDF5: h5open
+using HDF5: HDF5, h5open
 using ShroffCelegansModels
 using ShroffCelegansModels.JSON3
 using ShroffCelegansModels.MIPAVIO: get_annotation_modified_times_unix,
