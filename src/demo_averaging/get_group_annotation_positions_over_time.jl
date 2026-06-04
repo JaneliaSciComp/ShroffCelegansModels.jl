@@ -64,35 +64,47 @@ function get_group_annotation_positions_over_time(
     cache::Dict{String, Vector{Vector{Point3{Float64}}}}, # my_annotation_position_cache
     normalized_timepoints::AbstractVector{Float64} = LinRange(0,1,201);
     avg_models::Vector{<: CelegansModel} = avg_models
-)::Vector{Vector{Dict{String, Point3{Float64}}}} 
+)::Vector{Vector{Dict{String, Point3{Float64}}}}
     @assert length(avg_models) == length(normalized_timepoints)
     datasets_info = get_datasets_info(datasets)
-    group_annotation_positions_over_time = map(datasets_info) do dataset_info
+
+    # Parallelize across datasets — the inner per-timepoint loop is replaced
+    # with a sequential map so we don't oversubscribe threads. Each dataset's
+    # work is independent except for the shared `cache` write, which is
+    # guarded by a lock.
+    out = Vector{Vector{Dict{String, Point3{Float64}}}}(undef, length(datasets_info))
+    cache_lock = ReentrantLock()
+    Threads.@threads for ds_idx in eachindex(datasets_info)
+        dataset_info = datasets_info[ds_idx]
         dataset = dataset_info.dataset
         annotation_dict = dataset_info.annotation_dict
         smts_nt = dataset_info.smts_nt
-        if haskey(cache, dataset.path)
-            _annotation_positions_over_time = cache[dataset.path]
+        cached = lock(cache_lock) do
+            get(cache, dataset.path, nothing)
+        end
+        _annotation_positions_over_time = if cached !== nothing
+            cached
         else
-            #_annotation_positions_over_time = annotation_positions.((smts_nt,), (annotation_dict,), r)
-            _annotation_positions_over_time = Vector{Vector{Point3{Float64}}}(undef, length(normalized_timepoints))
-            ProgressMeter.@showprogress Threads.@threads for i in eachindex(normalized_timepoints)
-                nt = normalized_timepoints[i]
-                _annotation_positions_over_time[i] = annotation_positions(smts_nt, annotation_dict, nt; avg_models)
+            local positions = Vector{Vector{Point3{Float64}}}(undef, length(normalized_timepoints))
+            for i in eachindex(normalized_timepoints)
+                positions[i] = annotation_positions(smts_nt, annotation_dict, normalized_timepoints[i]; avg_models)
             end
-            cache[dataset.path] = _annotation_positions_over_time
+            lock(cache_lock) do
+                cache[dataset.path] = positions
+            end
+            positions
         end
         _annotation_positions_over_time::Vector{Vector{Point3{Float64}}}
-        try
-            map(_annotation_positions_over_time) do positions
-                Dict{String, Point3d}(keys(annotation_dict) .=> positions)
+        out[ds_idx] = try
+            map(_annotation_positions_over_time) do points
+                Dict{String, Point3d}(keys(annotation_dict) .=> points)
             end
         catch err
             @error "Error creating dict for dataset $(dataset.path)" exception = (err, Base.catch_backtrace())
-            map(_annotation_positions_over_time) do positions
-                Dict{String, Point3d}(keys(annotation_dict) .=> fill(Point3(NaN), length(keys(annotation_dict)) ))
+            map(_annotation_positions_over_time) do points
+                Dict{String, Point3d}(keys(annotation_dict) .=> fill(Point3(NaN), length(keys(annotation_dict))))
             end
         end
-    end::Vector{Vector{Dict{String, Point3{Float64}}}} # dataset, normalized time, name => position
-    return group_annotation_positions_over_time
+    end
+    return out
 end
