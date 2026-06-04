@@ -30,14 +30,23 @@ function load_straightened_annotations_over_time(
 end
 
 # Dataset-level mtime = max unix mtime across the requested timepoint offsets
-# from the integrated_annotation CSVs. NaN if every timepoint is missing.
+# from BOTH integrated_annotation CSVs AND lattice files (lattice.csv plus the
+# model_crossSections/latticeCrossSection_*.csv glob). Combining both inputs
+# means that a lattice change (which invalidates untwisting and therefore the
+# cached annotation positions) bumps this mtime — so a downstream staleness
+# check `cached.mtime < current_dataset_mtime(ds)` correctly invalidates the
+# entry. NaN if every timepoint is missing/outlier for both kinds.
 function _dataset_mtime(
     dataset::ShroffCelegansModels.Datasets.NormalizedDataset,
     offsets::AbstractUnitRange{Int}
 )::Float64
-    all_mtimes = ShroffCelegansModels.MIPAVIO.get_modified_times_unix(dataset)
-    selected = @view all_mtimes[offsets]
-    finite = filter(!isnan, selected)
+    ann = ShroffCelegansModels.MIPAVIO.get_annotation_modified_times_unix(dataset)
+    lat = ShroffCelegansModels.MIPAVIO.get_lattice_modified_times_unix(dataset)
+    selected_ann = @view ann[offsets]
+    selected_lat = @view lat[offsets]
+    finite = Float64[]
+    for m in selected_ann; isnan(m) || push!(finite, m); end
+    for m in selected_lat; isnan(m) || push!(finite, m); end
     isempty(finite) ? NaN : maximum(finite)
 end
 

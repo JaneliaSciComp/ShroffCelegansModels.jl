@@ -70,23 +70,19 @@ function run_recompute_pipeline(;
     ts = format(now(), "yyyy_mm_dd_HHMMSS")
     @info "Pipeline starting" config_path output_dir n_timepoints kinds
 
-    # Clear pre-loaded caches before doing anything else. parse_worm_dataset_path.jl
-    # populates `annotations_cache` and `my_annotation_position_cache` at module
-    # init from baked-in HDF5 snapshots (annotations_cache.h5 +
-    # my_annotation_position_cache.h5). Those snapshots are stale relative to
-    # /nearline — the whole point of this pipeline is to recompute against
-    # current disk state, so we must blow away the pre-loaded entries first.
-    # Without this, the priming step and average_annotations would short-circuit
-    # on `haskey(cache, ...)` and return stale data.
-    @info "Clearing pre-loaded caches before recompute"
-    empty!(ShroffCelegansModels.annotations_cache)
-    empty!(ShroffCelegansModels.my_annotation_position_cache)
-
     # 1. Load datasets.
     @info "[1/8] Loading datasets" config_path
     _, _, datasets = read_config_json(config_path)
     flattened = collect(Iterators.flatten(values(datasets)))
     @info "Loaded datasets" groups=length(datasets) total=length(flattened)
+
+    # parse_worm_dataset_path.jl pre-loads `annotations_cache` and
+    # `my_annotation_position_cache` at module init from HDF5 snapshots baked
+    # into the container image — those entries are stale relative to /nearline.
+    # Selectively invalidate only datasets whose mtimes have advanced since
+    # the cache was populated; unchanged datasets stay cached so the priming
+    # step is a no-op for them.
+    _invalidate_stale_caches!(flattened, kinds)
 
     # 2. Prime the annotations_cache for every dataset so subsequent
     #    update_annotations_cache calls have keys to look up. Failures are
@@ -225,4 +221,86 @@ function _export_post_pretwitch_csv(
     combined = vcat(pretwitch_explicit, posttwitch_explicit)
     CSV.write(output_csv, combined; writeheader = true)
     return output_csv
+end
+
+# Convert a Windows-style cache key path ("X:\foo\bar") to the equivalent
+# Linux path under /nearline/shroff. Legacy `annotations_cache.h5` entries
+# baked into the container image use Windows separators; the live cache
+# (populated by load_straightened_annotations_over_time) uses Linux paths
+# matching `dataset.path`. Normalizing the cache key lets us match either
+# format against `dataset.path` for staleness comparison.
+function _normalize_cache_path(p::AbstractString)::String
+    s = String(p)
+    occursin('\\', s) || return s
+    # Drive-letter prefix `X:\foo\bar` → `/nearline/shroff/foo/bar`.
+    if length(s) >= 3 && isuppercase(s[1]) && s[2] == ':' && s[3] == '\\'
+        s = "/nearline/shroff/" * s[4:end]
+    end
+    return replace(s, "\\" => "/")
+end
+
+# Selective cache invalidation. Stats current annotation+lattice mtimes for
+# every dataset, then removes any `annotations_cache` entries whose cached
+# mtime predates the current disk state (or is NaN — i.e. legacy entries
+# loaded from the pre-mtime-tracking HDF5 schema).
+#
+# For `my_annotation_position_cache` (which stores positions transformed via
+# avg_models and has no mtime tracking): if `kinds` contains "lattice", clear
+# all entries because avg_models change globally; otherwise drop just the
+# entries whose corresponding annotations_cache key was invalidated.
+function _invalidate_stale_caches!(
+    datasets::Vector{<:ShroffCelegansModels.Datasets.NormalizedDataset},
+    kinds::Vector{String},
+)
+    # Per-dataset max mtime across annotation + lattice inputs. Mirrors what
+    # `_dataset_mtime` records into `AnnotationsCacheValue.mtime`.
+    current_max = Dict{String, Float64}()
+    for ds in datasets
+        ann = ShroffCelegansModels.MIPAVIO.get_annotation_modified_times_unix(ds)
+        lat = ShroffCelegansModels.MIPAVIO.get_lattice_modified_times_unix(ds)
+        all_m = Float64[]
+        for m in ann; isnan(m) || push!(all_m, m); end
+        for m in lat; isnan(m) || push!(all_m, m); end
+        current_max[ds.path] = isempty(all_m) ? NaN : maximum(all_m)
+    end
+
+    annotations_cache = ShroffCelegansModels.annotations_cache
+    n_before = length(annotations_cache)
+    invalidated_paths = Set{String}()
+    unmatched_paths = Set{String}()
+    for k in collect(keys(annotations_cache))
+        cached_path = k[1]
+        norm = _normalize_cache_path(cached_path)
+        if !haskey(current_max, norm)
+            # Cache entry references a dataset that's not in the current config.
+            # Conservative: leave it alone (might be referenced by an interactive
+            # session). Track for visibility.
+            push!(unmatched_paths, norm)
+            continue
+        end
+        cur = current_max[norm]
+        cached_mt = annotations_cache[k].mtime
+        is_stale = isnan(cached_mt) || (!isnan(cur) && cur > cached_mt)
+        if is_stale
+            delete!(annotations_cache, k)
+            push!(invalidated_paths, norm)
+        end
+    end
+    @info "annotations_cache invalidation" n_before invalidated=length(invalidated_paths) remaining=length(annotations_cache) unmatched=length(unmatched_paths)
+
+    my_cache = ShroffCelegansModels.my_annotation_position_cache
+    if "lattice" in kinds
+        n_my_before = length(my_cache)
+        empty!(my_cache)
+        @info "my_annotation_position_cache fully cleared (lattice change → avg_models will be recomputed)" n_my_before
+    else
+        n_removed = 0
+        for p in invalidated_paths
+            if haskey(my_cache, p)
+                delete!(my_cache, p)
+                n_removed += 1
+            end
+        end
+        @info "my_annotation_position_cache selective invalidation" n_removed remaining=length(my_cache)
+    end
 end
