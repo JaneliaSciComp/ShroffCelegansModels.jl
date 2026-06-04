@@ -1,41 +1,44 @@
-# Daily snapshot of integrated_annotation CSV mtimes across all datasets.
-# Writes /data/annotations/modified_times/modified_times_YYYY_mm_dd_HHMMSS.h5
-# plus /data/annotations/modified_times/modified_times.h5 (latest) to the
-# shroff-data-test-annotations PVC.
+# Runs every 15 minutes; checks the shared annotations PVC for a
+# `pending_recompute` marker written by the daily save-modified-times CronJob.
+# When the marker is present, executes the recompute pipeline (currently a
+# stub) and removes the marker on success.
+#
+# Uses the default ServiceAccount — no special RBAC needed because all
+# coordination happens via files on the shared PVC.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: save-modified-times
+  name: recompute-on-mtime-change
   namespace: shroff-data-test
   labels:
     app: shroff-data-test
-    component: save-modified-times
+    component: recompute-on-mtime-change
 spec:
-  schedule: "0 2 * * *"
+  schedule: "*/15 * * * *"
   timeZone: "America/New_York"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
-  startingDeadlineSeconds: 3600
+  startingDeadlineSeconds: 600
   jobTemplate:
     spec:
-      backoffLimit: 1
-      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      activeDeadlineSeconds: 14400
       template:
         metadata:
           labels:
             app: shroff-data-test
-            component: save-modified-times
+            component: recompute-on-mtime-change
         spec:
           restartPolicy: Never
           containers:
-            - name: save-modified-times
+            - name: recompute-on-mtime-change
               image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
               command:
                 - julia
                 - --threads=auto
                 - --project=/app/ShroffCelegansModels.jl/web
-                - /app/ShroffCelegansModels.jl/web/scripts/save_modified_times.jl
+                - /app/ShroffCelegansModels.jl/web/scripts/run_recompute_if_needed.jl
               workingDir: /app/ShroffCelegansModels.jl
               env:
                 - name: MODIFIED_TIMES_DIR

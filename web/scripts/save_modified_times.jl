@@ -10,9 +10,11 @@ Writes two HDF5 files into the directory given by MODIFIED_TIMES_DIR
   - modified_times.h5                    (overwritten each run, "latest" pointer)
 
 After writing, compares the new mtimes against the prior `modified_times.h5`.
-If any (group, dataset, timepoint) mtime advanced AND env DISPATCH_RECOMPUTE_JOB
-is "true", dispatches a one-shot K8s Job via the in-cluster API to recompute
-downstream averages.
+If any (group, dataset, timepoint) mtime advanced, drops a JSON marker at
+`MODIFIED_TIMES_DIR/pending_recompute`. A separate frequently-running CronJob
+(`run_recompute_if_needed.jl`) picks up the marker and runs the recompute
+pipeline. The marker pattern avoids the need for in-cluster K8s API dispatch
+(which would require RBAC the namespace user can't grant).
 """
 
 using Dates: now, format
@@ -22,7 +24,6 @@ using ShroffCelegansModels.JSON3
 using ShroffCelegansModels.MIPAVIO: get_modified_times_unix, save_modified_times_unix
 
 include(joinpath(@__DIR__, "..", "..", "src", "demo_averaging", "read_config_json.jl"))
-include(joinpath(@__DIR__, "dispatch_recompute_job.jl"))
 
 # A single (group, dataset_index, timepoint_index) tuple whose mtime advanced
 # between two snapshots. timepoint_index is 1-based offset within the dataset's
@@ -129,15 +130,28 @@ function main()
         save_modified_times_unix(datasets, modified_times; filepath=tmp)
     end
 
-    dispatch_enabled = lowercase(get(ENV, "DISPATCH_RECOMPUTE_JOB", "false")) == "true"
-    if !isempty(changes) && dispatch_enabled
-        try
-            dispatch_recompute_job(length(changes))
-        catch err
-            @warn "Recompute Job dispatch failed (cron run still considered successful)" err
+    if !isempty(changes)
+        marker_path = joinpath(output_dir, "pending_recompute")
+        marker = Dict(
+            "triggered_at" => format(now(), "yyyy-mm-ddTHH:MM:SS"),
+            "change_count" => length(changes),
+            "examples" => [
+                Dict(
+                    "group" => c.group,
+                    "dataset_index" => c.dataset_index,
+                    "timepoint_index" => c.timepoint_index,
+                    "old_mtime" => isnan(c.old) ? nothing : c.old,
+                    "new_mtime" => c.new,
+                )
+                for c in first(changes, min(20, length(changes)))
+            ],
+        )
+        @info "Writing recompute marker" marker_path change_count=length(changes)
+        write_atomic(marker_path) do tmp
+            open(tmp, "w") do io
+                JSON3.write(io, marker)
+            end
         end
-    elseif !isempty(changes)
-        @info "Changes detected but DISPATCH_RECOMPUTE_JOB!=true — not dispatching" change_count=length(changes)
     end
 
     @info "Done"
