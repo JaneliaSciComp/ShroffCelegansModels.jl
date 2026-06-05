@@ -103,3 +103,33 @@ function load_average_annotations(; filename = "average_annotations.h5")
     end
     return d
 end
+
+"""
+    load_latest_average_annotations(; default_filename, prefix="edited_smoothed_average_annotations_", dir=ENV["RECOMPUTE_OUTPUT_DIR"] or "/data/annotations/recompute")
+
+Load the most recently produced averaged-annotations HDF5 from the recompute
+output directory if one exists; otherwise fall back to `default_filename`.
+Used by the meshscatter web apps so a fresh recompute is picked up on the
+next service restart without code changes.
+
+The directory is scanned for files matching `prefix*.h5` and the newest by
+mtime is chosen.
+"""
+function load_latest_average_annotations(;
+    default_filename::AbstractString,
+    prefix::AbstractString = "edited_smoothed_average_annotations_",
+    dir::AbstractString = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute"),
+)
+    chosen = default_filename
+    if isdir(dir)
+        candidates = String[
+            joinpath(dir, f) for f in readdir(dir)
+            if startswith(f, prefix) && endswith(f, ".h5") && !occursin(".tmp.", f)
+        ]
+        if !isempty(candidates)
+            chosen = argmax(mtime, candidates)
+        end
+    end
+    @info "Loading averaged annotations" chosen default_filename dir
+    return load_average_annotations(; filename = chosen)
+end

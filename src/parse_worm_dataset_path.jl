@@ -42,19 +42,40 @@ include("demo_averaging/save_cache.jl")
 include("demo_averaging/load_straightened_annotations_over_time.jl")
 include("demo_averaging/get_cell_trajectory_dict.jl")
 
+# Prefer a freshly-recomputed cache from the recompute pipeline output
+# (written by run_recompute_pipeline) if it's newer than the file baked
+# into the container image. Falls back to the package-internal default.
+#
+# `recompute_dir` is the directory the recompute CronJob writes to. Same
+# default as `run_recompute_pipeline`'s `output_dir` so the two stay in
+# sync.
+function _latest_cache_path(filename::AbstractString)
+    recompute_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
+    baked_in = joinpath(@__DIR__, "..", filename)
+    recomputed = joinpath(recompute_dir, filename)
+    if isfile(recomputed)
+        if !isfile(baked_in) || mtime(recomputed) > mtime(baked_in)
+            return recomputed
+        end
+    end
+    return baked_in
+end
+
 # initialize my_annotation_position_cache
 try
     if isempty(my_annotation_position_cache)
-        @info "Loading straightened annotation positions..."
-        load_annotation_cache()
+        path = _latest_cache_path("my_annotation_position_cache.h5")
+        @info "Loading straightened annotation positions..." path
+        load_annotation_cache(; filename = path)
     end
 catch err
     @warn "There was an issue loading the annotation cache" err
 end
 try
     if isempty(annotations_cache)
-        @info "Loading warped annotation positions..."
-        load_annotations_cache()
+        path = _latest_cache_path("annotations_cache.h5")
+        @info "Loading warped annotation positions..." path
+        load_annotations_cache(; filename = path)
     end
 catch err
     @warn "There was an issue loading the my annotation cache" err

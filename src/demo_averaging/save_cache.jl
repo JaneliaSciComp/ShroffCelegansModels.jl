@@ -15,9 +15,9 @@ if !@isdefined(annotations_cache)
     const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, AnnotationsCacheValue}()
 end
 
-function save_annotation_cache()
+function save_annotation_cache(; filename = "my_annotation_position_cache.h5")
     # my_annotation_position_cache
-    h5open("my_annotation_position_cache.h5", "w") do h5f
+    h5open(filename, "w") do h5f
         for (k,v) in my_annotation_position_cache
             parts = splitpath(k)
             parts[1] = replace(parts[1], ":" => "", "\\" => "")
@@ -194,7 +194,7 @@ function load_annotations_cache(
     return annotations_cache
 end
 
-function load_annotation_cache()
+function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_annotation_position_cache.h5"))
     function _descend(p::Union{HDF5.File,HDF5.Group})
         for k in keys(p)
             _descend(p[k])
@@ -224,7 +224,7 @@ function load_annotation_cache()
         end
         cache[idx] = pts
     end
-    h5open(joinpath(@__DIR__, "..", "..", "my_annotation_position_cache.h5"), "r") do h5f
+    h5open(filename, "r") do h5f
         _descend(h5f)
     end
 end

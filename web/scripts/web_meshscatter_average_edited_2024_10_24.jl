@@ -14,7 +14,9 @@ function black_body(fig)
 end
 
 function meshscatter_average_webapp()
-    average_annotation_dict = load_average_annotations(; filename = "edited_smoothed_average_annotations_r020_theta020_z030_with_seam_cells.h5")
+    average_annotation_dict = ShroffCelegansModels.load_latest_average_annotations(
+        default_filename = "edited_smoothed_average_annotations_r020_theta020_z030_with_seam_cells.h5",
+    )
     app = App(; title="Shroff Lab: C. elegans meshscatter_average") do session::Session
         return with_theme(theme_black()) do
             black_body(meshscatter_average(average_annotation_dict; session, xy_bounding_radius=sqrt(52)))

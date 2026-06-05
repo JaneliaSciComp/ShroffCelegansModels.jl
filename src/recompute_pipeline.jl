@@ -200,6 +200,27 @@ function run_recompute_pipeline(;
         )
     end
 
+    # Persist the in-memory caches so future package boots (interactive
+    # sessions, web service restarts) load the freshly-recomputed data
+    # instead of the stale snapshots baked into the container image.
+    # parse_worm_dataset_path.jl picks up these files at module init when
+    # `RECOMPUTE_OUTPUT_DIR` env is set or its default exists.
+    annotations_cache_h5 = joinpath(output_dir, "annotations_cache.h5")
+    my_positions_h5 = joinpath(output_dir, "my_annotation_position_cache.h5")
+    _phase("8b/8 persist_caches") do
+        try
+            _write_atomic(annotations_cache_h5) do tmp
+                ShroffCelegansModels.save_annotations_cache(ShroffCelegansModels.annotations_cache; filename = tmp)
+            end
+            _write_atomic(my_positions_h5) do tmp
+                ShroffCelegansModels.save_annotation_cache(; filename = tmp)
+            end
+            @info "Persisted caches" annotations_cache_h5 my_positions_h5
+        catch err
+            @warn "Cache persistence failed (pipeline outputs still valid)" err
+        end
+    end
+
     # On full success, delete the checkpoint dir so the next run starts fresh.
     try
         rm(checkpoint_dir; recursive=true, force=true)
@@ -208,7 +229,21 @@ function run_recompute_pipeline(;
     end
 
     @info "Pipeline complete" h5_path csv_path n_changes n_timepoints phase_timings
-    return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings)
+    return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
+end
+
+# Atomic write: invoke `body(tmp_path)` to produce the file, then mv it into
+# place. POSIX rename is atomic on the same filesystem; readers always see
+# either the previous version or the new one — never a partial write.
+function _write_atomic(body, dst::AbstractString)
+    tmp = string(dst, ".tmp.", getpid(), ".", time_ns())
+    try
+        body(tmp)
+        mv(tmp, dst; force=true)
+    catch
+        isfile(tmp) && rm(tmp; force=true)
+        rethrow()
+    end
 end
 
 # "0.20" -> "020"; "0.3" -> "030". Matches the existing on-disk filename
