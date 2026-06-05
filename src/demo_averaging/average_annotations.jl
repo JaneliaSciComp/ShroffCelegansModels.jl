@@ -13,13 +13,18 @@ function average_annotations(
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
     avg_models::Vector{<: CelegansModel} = avg_models,
-    use_cell_key_annotations_only = true
+    use_cell_key_annotations_only = true,
+    checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )
     if isa(timepoints, Integer)
         N_timepoints = timepoints
         timepoints = LinRange(0, 1, N_timepoints)
     end
-    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache, timepoints; avg_models = avg_models)
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(
+        datasets, cache, timepoints;
+        avg_models = avg_models,
+        checkpoint_dir = checkpoint_dir,
+    )
     group_annotation_positions_over_time::Vector{Vector{Dict{String, Point3{Float64}}}}
     #common_annotations = intersect(map(datasets_info) do dataset_info
     #    collect(keys(dataset_info.annotation_dict))
@@ -51,10 +56,11 @@ function average_annotations(
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
     avg_models::Vector{<: CelegansModel} = avg_models,
-    use_cell_key_annotations_only = true
+    use_cell_key_annotations_only = true,
+    checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )
-    average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k    
-           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only)
+    average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k
+           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only, checkpoint_dir)
     end)
     return average_annotations_dict
 end

@@ -63,10 +63,18 @@ function get_group_annotation_positions_over_time(
     datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset},
     cache::Dict{String, Vector{Vector{Point3{Float64}}}}, # my_annotation_position_cache
     normalized_timepoints::AbstractVector{Float64} = LinRange(0,1,201);
-    avg_models::Vector{<: CelegansModel} = avg_models
+    avg_models::Vector{<: CelegansModel} = avg_models,
+    checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )::Vector{Vector{Dict{String, Point3{Float64}}}}
     @assert length(avg_models) == length(normalized_timepoints)
+
+    # `get_datasets_info` runs sequentially before the threaded loop. Time it
+    # explicitly so we can see how much of step 6's budget is serial setup
+    # (StraightenedModelTimeSeries + get_cell_trajectory_dict per dataset).
+    @info "get_datasets_info begin" n_datasets=length(datasets)
+    t_info = time()
     datasets_info = get_datasets_info(datasets)
+    @info "get_datasets_info done" elapsed_s=round(time() - t_info; digits=2)
 
     # Parallelize across datasets — the inner per-timepoint loop is replaced
     # with a sequential map so we don't oversubscribe threads. Each dataset's
@@ -76,6 +84,7 @@ function get_group_annotation_positions_over_time(
     cache_lock = ReentrantLock()
     prog = ProgressMeter.Progress(length(datasets_info); desc="Avg annotations / dataset...")
     Threads.@threads for ds_idx in eachindex(datasets_info)
+        ds_t0 = time()
         dataset_info = datasets_info[ds_idx]
         dataset = dataset_info.dataset
         annotation_dict = dataset_info.annotation_dict
@@ -83,7 +92,8 @@ function get_group_annotation_positions_over_time(
         cached = lock(cache_lock) do
             get(cache, dataset.path, nothing)
         end
-        _annotation_positions_over_time = if cached !== nothing
+        from_cache = cached !== nothing
+        _annotation_positions_over_time = if from_cache
             cached
         else
             local positions = Vector{Vector{Point3{Float64}}}(undef, length(normalized_timepoints))
@@ -106,6 +116,27 @@ function get_group_annotation_positions_over_time(
                 Dict{String, Point3d}(keys(annotation_dict) .=> fill(Point3(NaN), length(keys(annotation_dict))))
             end
         end
+        # Write per-dataset checkpoint (skip if entry came from a prior checkpoint
+        # load — no point rewriting unchanged data). Each thread writes a unique
+        # filename so no lock is needed for the file I/O itself.
+        checkpoint_bytes = if checkpoint_dir !== nothing && !from_cache
+            ShroffCelegansModels.write_dataset_checkpoint(
+                checkpoint_dir, dataset.path, _annotation_positions_over_time,
+            )
+        else
+            0
+        end
+        @info("step6 dataset done",
+            idx = ds_idx,
+            total = length(datasets_info),
+            path = dataset.path,
+            thread = Threads.threadid(),
+            n_annotations = length(annotation_dict),
+            n_timepoints = length(normalized_timepoints),
+            elapsed_s = round(time() - ds_t0; digits=2),
+            from_cache = from_cache,
+            checkpoint_bytes = checkpoint_bytes,
+        )
         ProgressMeter.next!(prog)
     end
     ProgressMeter.finish!(prog)

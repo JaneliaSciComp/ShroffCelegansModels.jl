@@ -27,6 +27,10 @@ using Dates: now, format
 using DataFrames: DataFrame
 using CSV: CSV
 using Printf: @sprintf
+using LinearAlgebra: BLAS
+using HDF5: h5open, attrs, read_attribute, create_group
+using SHA: sha1
+using GeometryBasics: Point3
 
 # Default smoothing matches the production filename pattern
 # `..._r020_theta020_z030_...`.
@@ -67,14 +71,31 @@ function run_recompute_pipeline(;
     smooth_factor_z::Float64 = _DEFAULT_SMOOTH_Z,
 )
     mkpath(output_dir)
+    checkpoint_dir = joinpath(output_dir, "checkpoint")
+    mkpath(checkpoint_dir)
     ts = format(now(), "yyyy_mm_dd_HHMMSS")
-    @info "Pipeline starting" config_path output_dir n_timepoints kinds
+    phase_timings = Pair{String, Float64}[]
+    # `body` is first so callers can use do-block syntax: `_phase("...") do ... end`.
+    function _phase(body, label::String)
+        t = time()
+        result = body()
+        elapsed_s = round(time() - t; digits=2)
+        push!(phase_timings, label => elapsed_s)
+        @info "Step done" step=label elapsed_s
+        return result
+    end
+
+    @info "Pipeline threading" julia_nthreads=Threads.nthreads() blas_nthreads=BLAS.get_num_threads()
+    @info "Pipeline starting" config_path output_dir checkpoint_dir n_timepoints kinds
 
     # 1. Load datasets.
-    @info "[1/8] Loading datasets" config_path
-    _, _, datasets = read_config_json(config_path)
-    flattened = collect(Iterators.flatten(values(datasets)))
-    @info "Loaded datasets" groups=length(datasets) total=length(flattened)
+    datasets, flattened = _phase("1/8 load_datasets") do
+        @info "[1/8] Loading datasets" config_path
+        _, _, datasets = read_config_json(config_path)
+        flattened = collect(Iterators.flatten(values(datasets)))
+        @info "Loaded datasets" groups=length(datasets) total=length(flattened)
+        return datasets, flattened
+    end
 
     # parse_worm_dataset_path.jl pre-loads `annotations_cache` and
     # `my_annotation_position_cache` at module init from HDF5 snapshots baked
@@ -82,83 +103,112 @@ function run_recompute_pipeline(;
     # Selectively invalidate only datasets whose mtimes have advanced since
     # the cache was populated; unchanged datasets stay cached so the priming
     # step is a no-op for them.
-    _invalidate_stale_caches!(flattened, kinds)
+    _phase("1b/8 invalidate_stale") do
+        _invalidate_stale_caches!(flattened, kinds)
+    end
+
+    # 1c. Load any per-dataset checkpoint files from a previous interrupted
+    #     run. Files for paths just invalidated above are skipped.
+    n_checkpoints_loaded = _phase("1c/8 load_checkpoints") do
+        _load_dataset_checkpoints!(checkpoint_dir, flattened)
+    end
+    @info "Checkpoints loaded" n=n_checkpoints_loaded dir=checkpoint_dir
 
     # 2. Prime the annotations_cache for every dataset so subsequent
     #    update_annotations_cache calls have keys to look up. Failures are
     #    logged but non-fatal.
-    @info "[2/8] Priming annotations_cache"
-    primed = 0
-    for ds in flattened
-        try
-            load_straightened_annotations_over_time(ds; use_myuntwist=true)
-            primed += 1
-        catch err
-            @warn "Cache prime failed for dataset" path=ds.path err
+    _phase("2/8 prime_cache") do
+        @info "[2/8] Priming annotations_cache"
+        primed = 0
+        for ds in flattened
+            try
+                load_straightened_annotations_over_time(ds; use_myuntwist=true)
+                primed += 1
+            catch err
+                @warn "Cache prime failed for dataset" path=ds.path err
+            end
         end
+        @info "Cache primed" datasets=primed of=length(flattened)
     end
-    @info "Cache primed" datasets=primed of=length(flattened)
 
     # 3 & 4. Load + apply annotation edits.
-    n_changes = 0
-    if isfile(annotation_changes_path)
-        @info "[3/8] Loading annotation changes" annotation_changes_path
-        changes = ShroffCelegansModels.load_annotation_changes_cache(annotation_changes_path)
-        n_changes = length(changes)
-        @info "[4/8] Applying annotation changes" n_changes
-        ShroffCelegansModels.update_annotations_cache(
-            ShroffCelegansModels.annotations_cache, changes
-        )
-    else
-        @warn "Annotation changes file not found — skipping edit application" annotation_changes_path
+    n_changes = _phase("3-4/8 load_apply_changes") do
+        if isfile(annotation_changes_path)
+            @info "[3/8] Loading annotation changes" annotation_changes_path
+            changes = ShroffCelegansModels.load_annotation_changes_cache(annotation_changes_path)
+            n = length(changes)
+            @info "[4/8] Applying annotation changes" n_changes=n
+            ShroffCelegansModels.update_annotations_cache(
+                ShroffCelegansModels.annotations_cache, changes
+            )
+            return n
+        else
+            @warn "Annotation changes file not found — skipping edit application" annotation_changes_path
+            return 0
+        end
     end
 
     # 5. Average lattice models.
-    @info "[5/8] Computing average lattice models" n_timepoints
-    t0 = time()
-    avg_models = get_avg_models(n_timepoints)
-    @info "avg_models done" elapsed_s=round(time() - t0; digits=1) n_models=length(avg_models)
+    avg_models = _phase("5/8 get_avg_models") do
+        @info "[5/8] Computing average lattice models" n_timepoints
+        models = get_avg_models(n_timepoints)
+        @info "avg_models done" n_models=length(models)
+        return models
+    end
 
-    # 6. Edited averaged annotations + smoothing.
-    @info "[6/8] Averaging annotations against avg_models" n_timepoints
-    t0 = time()
-    avg_dict = ShroffCelegansModels.average_annotations(
-        datasets;
-        timepoints = LinRange(0, 1, n_timepoints),
-        avg_models = avg_models,
-        use_cell_key_annotations_only = true,
-    )
-    @info "average_annotations done" elapsed_s=round(time() - t0; digits=1)
+    # 6. Edited averaged annotations.
+    avg_dict = _phase("6/8 average_annotations") do
+        @info "[6/8] Averaging annotations against avg_models" n_timepoints checkpoint_dir
+        ShroffCelegansModels.average_annotations(
+            datasets;
+            timepoints = LinRange(0, 1, n_timepoints),
+            avg_models = avg_models,
+            use_cell_key_annotations_only = true,
+            checkpoint_dir = checkpoint_dir,
+        )
+    end
 
-    @info "[6.5/8] Smoothing" smooth_factor_r smooth_factor_θ smooth_factor_z
-    smoothed = ShroffCelegansModels.smooth_average_annotations(
-        avg_dict;
-        smooth_factor_r = smooth_factor_r,
-        smooth_factor_θ = smooth_factor_θ,
-        smooth_factor_z = smooth_factor_z,
-    )
+    smoothed = _phase("6.5/8 smooth") do
+        @info "[6.5/8] Smoothing" smooth_factor_r smooth_factor_θ smooth_factor_z
+        ShroffCelegansModels.smooth_average_annotations(
+            avg_dict;
+            smooth_factor_r = smooth_factor_r,
+            smooth_factor_θ = smooth_factor_θ,
+            smooth_factor_z = smooth_factor_z,
+        )
+    end
 
     # 7. Write HDF5 in the format the meshscatter web app loads.
     h5_path = joinpath(
         output_dir,
         "edited_smoothed_average_annotations_r$(_factor_token(smooth_factor_r))_theta$(_factor_token(smooth_factor_θ))_z$(_factor_token(smooth_factor_z))_$(ts).h5",
     )
-    @info "[7/8] Writing averaged HDF5" h5_path
-    ShroffCelegansModels.save_average_annotations(smoothed; filename = h5_path)
+    _phase("7/8 write_h5") do
+        @info "[7/8] Writing averaged HDF5" h5_path
+        ShroffCelegansModels.save_average_annotations(smoothed; filename = h5_path)
+    end
 
-    # 8. Export DataFrame. Always produce the post-twitch CSV; combine with
-    #    pre-twitch if the source file is configured and present.
+    # 8. Export DataFrame.
     csv_path = joinpath(output_dir, "post_pretwitch_export_$(ts).csv")
-    posttwitch_only = isempty(pretwitch_csv_path) || !isfile(pretwitch_csv_path)
-    @info "[8/8] Exporting DataFrame" csv_path pretwitch_csv_path posttwitch_only
-    _export_post_pretwitch_csv(
-        h5_path, csv_path;
-        pretwitch_csv_path = posttwitch_only ? nothing : pretwitch_csv_path,
-        avg_models = avg_models,
-    )
+    _phase("8/8 export_csv") do
+        posttwitch_only = isempty(pretwitch_csv_path) || !isfile(pretwitch_csv_path)
+        @info "[8/8] Exporting DataFrame" csv_path pretwitch_csv_path posttwitch_only
+        _export_post_pretwitch_csv(
+            h5_path, csv_path;
+            pretwitch_csv_path = posttwitch_only ? nothing : pretwitch_csv_path,
+            avg_models = avg_models,
+        )
+    end
 
-    @info "Pipeline complete" h5_path csv_path n_changes n_timepoints
-    return (; h5_path, csv_path, n_changes, n_timepoints)
+    # On full success, delete the checkpoint dir so the next run starts fresh.
+    try
+        rm(checkpoint_dir; recursive=true, force=true)
+    catch err
+        @warn "Could not remove checkpoint dir after success" checkpoint_dir err
+    end
+
+    @info "Pipeline complete" h5_path csv_path n_changes n_timepoints phase_timings
+    return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings)
 end
 
 # "0.20" -> "020"; "0.3" -> "030". Matches the existing on-disk filename
@@ -303,4 +353,95 @@ function _invalidate_stale_caches!(
         end
         @info "my_annotation_position_cache selective invalidation" n_removed remaining=length(my_cache)
     end
+end
+
+# 16-hex-char filename derived from sha1(path) — enough collision resistance
+# for our ~72-dataset universe and short enough to fit comfortably in any FS.
+checkpoint_filename(path::AbstractString) = bytes2hex(sha1(path))[1:16] * ".h5"
+
+# Write a single dataset's positions to `<checkpoint_dir>/<hash>.h5` atomically
+# (via temp + rename). Stores the full `dataset.path` as an attribute for
+# inspection. Returns the bytes written (0 on no-op). Called from the threaded
+# loop in get_group_annotation_positions_over_time; no lock needed because each
+# dataset has a unique filename.
+function write_dataset_checkpoint(
+    checkpoint_dir::AbstractString,
+    dataset_path::AbstractString,
+    positions::Vector{Vector{Point3{Float64}}},
+)::Int
+    isempty(checkpoint_dir) && return 0
+    final_path = joinpath(checkpoint_dir, checkpoint_filename(dataset_path))
+    tmp_path = string(final_path, ".tmp.", getpid(), ".", time_ns())
+    try
+        h5open(tmp_path, "w") do h5f
+            attrs(h5f)["path"] = String(dataset_path)
+            g = create_group(h5f, "positions")
+            for (idx, pts) in pairs(positions)
+                # Layout matches save_annotation_cache: 3×N row-stacked matrix.
+                m = reinterpret(Float64, pts)
+                m = reshape(m, 3, :)
+                tp_name = @sprintf("timepoint_%03d", idx)
+                g[tp_name] = collect(transpose(m))
+            end
+        end
+        mv(tmp_path, final_path; force=true)
+        return filesize(final_path)
+    catch err
+        isfile(tmp_path) && rm(tmp_path; force=true)
+        @warn "Checkpoint write failed" final_path dataset_path err
+        return 0
+    end
+end
+
+# Read all `<checkpoint_dir>/*.h5` files (skipping stale `*.tmp.*` artefacts)
+# and insert each into `my_annotation_position_cache`. Entries whose `path`
+# attribute is NOT in the current dataset list are ignored (treated as stale,
+# left on disk for human inspection — likely from an older config). Returns
+# the count loaded.
+function _load_dataset_checkpoints!(
+    checkpoint_dir::AbstractString,
+    datasets::Vector{<:ShroffCelegansModels.Datasets.NormalizedDataset},
+)::Int
+    isdir(checkpoint_dir) || return 0
+    # Build the valid-paths set from CURRENT datasets, not what was on disk
+    # last time — drops cross-config stale checkpoints.
+    valid_paths = Set(ds.path for ds in datasets)
+    my_cache = ShroffCelegansModels.my_annotation_position_cache
+    n_loaded = 0
+    n_skipped_invalidated = 0
+    n_skipped_other = 0
+    for fname in readdir(checkpoint_dir)
+        endswith(fname, ".h5") || continue
+        occursin(".tmp.", fname) && (rm(joinpath(checkpoint_dir, fname); force=true); continue)
+        fpath = joinpath(checkpoint_dir, fname)
+        try
+            h5open(fpath, "r") do h5f
+                ds_path = String(read_attribute(h5f, "path"))
+                if !(ds_path in valid_paths)
+                    n_skipped_other += 1
+                    return
+                end
+                # If the in-memory `my_annotation_position_cache` was just
+                # invalidated for this path (selective invalidation removed it),
+                # the checkpoint reinstates it — i.e. resume from where the
+                # previous run left off. If it wasn't invalidated, we'd just
+                # be loading data identical to what's already cached; still
+                # cheap and tolerant.
+                g = h5f["positions"]
+                tps = sort(parse.(Int, last.(split.(filter(startswith("timepoint_"), keys(g)), "_"))))
+                positions = Vector{Vector{Point3{Float64}}}(undef, length(tps))
+                for tp_i in tps
+                    tp_name = @sprintf("timepoint_%03d", tp_i)
+                    mat = transpose(g[tp_name][])::AbstractMatrix{Float64}
+                    positions[tp_i] = vec(reinterpret(Point3{Float64}, mat))
+                end
+                my_cache[ds_path] = positions
+                n_loaded += 1
+            end
+        catch err
+            @warn "Failed to load checkpoint file" fpath err
+        end
+    end
+    n_skipped_other > 0 && @info "Checkpoint files skipped (path not in current config)" n=n_skipped_other
+    return n_loaded
 end
