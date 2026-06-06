@@ -78,6 +78,12 @@ module ShroffCelegansModels
     include("demo_averaging/average_annotations.jl")
     include("demo_averaging/smooth_average_annotations.jl")
     include("demo_averaging/resave_for_ben.jl")
+    # seam_cell_to_lineage_map.jl defines get_pretwitch_df,
+    # get_annotation_name_translation_df, get_pretwitch_explicit_df.
+    # explicit_export.jl uses those + get_seam_cells_explicit_df to
+    # build the combined pretwitch+posttwitch dataframe for the pipeline.
+    include("seam_cell_to_lineage_map.jl")
+    include("demo_averaging/explicit_export.jl")
     include("recompute_pipeline.jl")
     include("makie.jl")
 

@@ -251,6 +251,30 @@ function run_recompute_pipeline(;
         )
     end
 
+    # 8c. Combined pretwitch + posttwitch explicit-schema CSVs. Uses the
+    #     `_for_ben.csv` produced by `resave_for_ben` (called from phase 8)
+    #     plus the ryan_data pretwitch coords + naming-correlations table
+    #     baked into the repo. Positional model cell names are translated
+    #     to embryonic lineage names.
+    ben_csv = replace(h5_path, ".h5" => "_for_ben.csv")
+    _phase("8a/8 export_combined") do
+        if isfile(ben_csv)
+            try
+                ShroffCelegansModels.write_combined_explicit_csvs(;
+                    output_dir = output_dir,
+                    avg_models = avg_models,
+                    ben_csv_path = ben_csv,
+                    date_str = ts,
+                )
+                @info "[8c/8] Wrote combined pretwitch+posttwitch CSVs"
+            catch err
+                @warn "Combined explicit-CSV export failed (pipeline outputs still valid)" err
+            end
+        else
+            @warn "Skipping 8c — _for_ben.csv not found" ben_csv
+        end
+    end
+
     # Persist the in-memory caches so future package boots (interactive
     # sessions, web service restarts) load the freshly-recomputed data
     # instead of the stale snapshots baked into the container image.

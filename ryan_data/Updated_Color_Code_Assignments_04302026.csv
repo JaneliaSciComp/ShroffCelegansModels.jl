@@ -1,0 +1,12 @@
+﻿Tissue Type,R,G,B
+Nerve Ring,0,0,128
+Non-Seam Hypodermal,0,128,0
+Neuroblast,0,255,255
+Seam,16,185,0
+Pharyngeal,93,255,109
+Neurons,185,0,255
+Excretory,191,87,0
+Muscle,255,0,0
+Intestinal,255,99,93
+Glial,255,251,93
+Other,255,255,255
