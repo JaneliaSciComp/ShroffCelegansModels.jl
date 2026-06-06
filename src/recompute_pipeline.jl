@@ -23,7 +23,7 @@ vars / package defaults — so an LSF wrapper could invoke it identically once
 /nearline is bridged elsewhere. No OpenShift-specific assumptions live here.
 """
 
-using Dates: now, format
+using Dates: Dates, now, format
 using DataFrames: DataFrame
 using CSV: CSV
 using Printf: @sprintf
@@ -178,11 +178,32 @@ function run_recompute_pipeline(;
         end
     end
 
-    # 5. Average lattice models.
+    # 5. Average lattice models. Disk-cached keyed by (n_timepoints,
+    #    max lattice mtime across all datasets) — reuses the existing
+    #    save_avg_models / load_avg_models pair, just adds a
+    #    `lattice_mtime` HDF5 attribute so we can detect staleness.
+    #    Saves ~40s for n=51, more for n=371 when no lattice CSV has
+    #    been touched since the cache was written.
+    avg_models_h5 = joinpath(output_dir, "avg_models_n$(n_timepoints).h5")
+    current_lattice_mtime = _max_lattice_mtime(flattened)
     avg_models = _phase("5/8 get_avg_models") do
+        cached = _load_avg_models_if_fresh(avg_models_h5, current_lattice_mtime)
+        if cached !== nothing
+            @info "[5/8] Loaded cached avg_models" path=avg_models_h5 n_models=length(cached)
+            return cached
+        end
         @info "[5/8] Computing average lattice models" n_timepoints
         models = get_avg_models(n_timepoints)
         @info "avg_models done" n_models=length(models)
+        try
+            ShroffCelegansModels.save_avg_models(avg_models_h5, models)
+            h5open(avg_models_h5, "r+") do h5f
+                attrs(h5f)["lattice_mtime"] = current_lattice_mtime
+            end
+            @info "Saved avg_models cache" path=avg_models_h5 lattice_mtime=current_lattice_mtime
+        catch err
+            @warn "avg_models cache save failed (run still valid)" err
+        end
         return models
     end
 
@@ -251,6 +272,19 @@ function run_recompute_pipeline(;
         end
     end
 
+    # Write a static index.html so the /recompute/ route shows full
+    # filenames + sizes + mtimes (nginx's autoindex truncates at ~50
+    # chars). Generates one for the top-level dir and one for each
+    # `archive_*/` subdir.
+    _phase("8c/8 write_index") do
+        try
+            _write_recompute_index(output_dir)
+            @info "Wrote recompute index" output_dir
+        catch err
+            @warn "Index generation failed (pipeline outputs still valid)" err
+        end
+    end
+
     # On full success, delete the checkpoint dir so the next run starts fresh.
     try
         rm(checkpoint_dir; recursive=true, force=true)
@@ -262,31 +296,38 @@ function run_recompute_pipeline(;
     return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
 end
 
-# Sweep the top level of `output_dir` into a timestamped `archive_<ts>/`
-# subdir, where `<ts>` is the newest run-timestamp embedded in any existing
-# output filename (yyyy_mm_dd_HHMMSS). Returns the archive dir path on
-# success, or `nothing` if there was nothing to archive (e.g. first run on
-# a fresh directory, or only non-timestamped/transient files present).
+# Sweep dated top-level outputs into `archive_<ts>/`, where `<ts>` is the
+# newest run-timestamp embedded in any existing filename. Used for
+# per-run products (edited_smoothed_*_<ts>.h5, post_pretwitch_export_*.csv,
+# embryos_*_<date>.h5, etc.).
 #
-# Skipped (left in place):
+# Left in place:
 #   - subdirectories (already-archived, `checkpoint/`, etc.)
 #   - in-progress `.tmp.*` writes
+#   - "rolling" cache files that get overwritten each run (no date in name):
+#     annotations_cache.h5, my_annotation_position_cache.h5, avg_models_n*.h5
 #
-# If no timestamped artifact exists at top level but non-timestamped files do
-# (e.g. only `annotations_cache.h5` from a partial run), nothing is moved —
-# we don't fabricate a timestamp for an unknown vintage.
+# A file is considered "dated" if it contains a `YYYY_MM_DD` substring (with
+# or without the trailing `_HHMMSS`). Cache files have no date and therefore
+# stay at the top level for the next run to reuse.
+#
+# Returns the archive dir path, or `nothing` if there's nothing to archive.
+const _DATE_RE = r"\d{4}_\d{2}_\d{2}"
+const _TS_RE   = r"(\d{4}_\d{2}_\d{2}_\d{6})"
+
 function _archive_previous_outputs!(output_dir::AbstractString)
     isdir(output_dir) || return nothing
 
-    ts_re = r"(\d{4}_\d{2}_\d{2}_\d{6})"
     latest_ts = ""
     candidates = String[]
     for f in readdir(output_dir)
         full = joinpath(output_dir, f)
-        isdir(full) && continue                      # skip checkpoint/, archive_*/, ...
-        occursin(".tmp.", f) && continue             # skip in-progress writes
+        isdir(full) && continue              # skip checkpoint/, archive_*/, ...
+        occursin(".tmp.", f) && continue     # skip in-progress writes
+        occursin(_DATE_RE, f) || continue    # skip rolling caches (no date)
+
         push!(candidates, f)
-        m = match(ts_re, f)
+        m = match(_TS_RE, f)
         if m !== nothing && m.captures[1] > latest_ts
             latest_ts = m.captures[1]
         end
@@ -294,8 +335,10 @@ function _archive_previous_outputs!(output_dir::AbstractString)
 
     isempty(candidates) && return nothing
     if isempty(latest_ts)
-        @info "No timestamped artifacts found at top level; leaving non-timestamped files in place" candidates
-        return nothing
+        # Only dated-but-not-full-timestamp files (e.g. only embryos_*_<date>.h5);
+        # fall back to the date portion of the first candidate.
+        m = match(_DATE_RE, first(candidates))
+        latest_ts = m === nothing ? "previous" : m.match
     end
 
     archive_dir = joinpath(output_dir, "archive_" * latest_ts)
@@ -318,6 +361,54 @@ function _archive_previous_outputs!(output_dir::AbstractString)
     end
     @info "Archive populated" archive_dir n_moved of=length(candidates)
     return archive_dir
+end
+
+# Max lattice mtime across every dataset's every timepoint — the staleness
+# signal for the avg_models disk cache. avg_models depends only on lattice
+# data (it averages CelegansModels), so a single global max across all
+# datasets is sufficient: if any lattice CSV is newer than the cache, we
+# recompute.
+function _max_lattice_mtime(datasets::Vector{<:ShroffCelegansModels.Datasets.NormalizedDataset})::Float64
+    m = NaN
+    for ds in datasets
+        for x in ShroffCelegansModels.MIPAVIO.get_lattice_modified_times_unix(ds)
+            isnan(x) && continue
+            if isnan(m) || x > m
+                m = x
+            end
+        end
+    end
+    return m
+end
+
+# Load an avg_models HDF5 written by `save_avg_models` IF it carries a
+# `lattice_mtime` attr that's at least `current_lattice_mtime`. Returns
+# `nothing` for missing file, missing attr, or stale cache.
+function _load_avg_models_if_fresh(path::AbstractString, current_lattice_mtime::Float64)
+    isfile(path) || return nothing
+    isnan(current_lattice_mtime) && return nothing
+    stored_mtime = try
+        h5open(path, "r") do h5f
+            if haskey(attrs(h5f), "lattice_mtime")
+                Float64(read(attrs(h5f)["lattice_mtime"]))
+            else
+                NaN
+            end
+        end
+    catch err
+        @warn "Could not read lattice_mtime from avg_models cache" path err
+        return nothing
+    end
+    if isnan(stored_mtime) || stored_mtime < current_lattice_mtime
+        @info "avg_models cache stale" path stored_mtime current_lattice_mtime
+        return nothing
+    end
+    return try
+        ShroffCelegansModels.load_avg_models(path)
+    catch err
+        @warn "Failed to load avg_models cache; will recompute" path err
+        nothing
+    end
 end
 
 # Atomic write: invoke `body(tmp_path)` to produce the file, then mv it into
@@ -567,4 +658,147 @@ function _load_dataset_checkpoints!(
     end
     n_skipped_other > 0 && @info "Checkpoint files skipped (path not in current config)" n=n_skipped_other
     return n_loaded
+end
+
+# ---------- static index.html generation for /recompute/ ----------
+#
+# nginx's autoindex (html mode) truncates filenames to ~50 chars. We
+# generate our own index.html that nginx serves automatically when
+# present. Pico.css matches the rest of the Shroff web pages.
+
+const _PICO_CSS_LINK = "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">"
+const _SHROFF_CSS_LINK = "<link rel=\"stylesheet\" href=\"/style.css\">"
+
+function _human_size(n::Integer)
+    n < 1024 && return string(n, " B")
+    n < 1024^2 && return string(round(n / 1024; digits=1), " KB")
+    n < 1024^3 && return string(round(n / 1024^2; digits=1), " MB")
+    return string(round(n / 1024^3; digits=2), " GB")
+end
+
+_format_mtime(m::Float64) = isnan(m) ? "" : Dates.format(Dates.unix2datetime(m), "yyyy-mm-dd HH:MM:SS")
+
+# Sanitize a string for use as an HTML text node. We control the inputs
+# (filenames, sizes, timestamps) but escape anyway for safety.
+function _html_escape(s::AbstractString)
+    out = IOBuffer()
+    for c in s
+        c == '&' ? print(out, "&amp;") :
+        c == '<' ? print(out, "&lt;") :
+        c == '>' ? print(out, "&gt;") :
+        c == '"' ? print(out, "&quot;") :
+        c == '\'' ? print(out, "&#39;") :
+        print(out, c)
+    end
+    return String(take!(out))
+end
+
+function _render_index_html(;
+    title::AbstractString,
+    intro::AbstractString,
+    files::Vector,                       # Vector of NamedTuples (name, size, mtime)
+    subdirs::Vector{<:AbstractString},
+    parent_link::AbstractString,
+)
+    rows = isempty(files) ? "<tr><td colspan=\"3\"><em>(no files)</em></td></tr>" :
+        join(map(files) do f
+            name_esc = _html_escape(f.name)
+            "<tr><td><a href=\"$(name_esc)\"><code>$(name_esc)</code></a></td>" *
+            "<td>$(_human_size(f.size))</td>" *
+            "<td>$(_format_mtime(f.mtime))</td></tr>"
+        end, "\n            ")
+    subdir_section = if isempty(subdirs)
+        ""
+    else
+        items = join(map(subdirs) do d
+            d_esc = _html_escape(d)
+            "<li><a href=\"$(d_esc)/\"><code>$(d_esc)/</code></a></li>"
+        end, "\n              ")
+        """
+
+            <h2>Archived runs</h2>
+            <ul>
+              $(items)
+            </ul>"""
+    end
+    generated_at = _format_mtime(Float64(time()))
+    title_esc = _html_escape(title)
+    intro_esc = _html_escape(intro)
+    """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>$(title_esc)</title>
+    $(_PICO_CSS_LINK)
+    $(_SHROFF_CSS_LINK)
+  </head>
+  <body>
+    <main class="container">
+      <p><a href="$(parent_link)">&larr; up</a></p>
+      <h1>$(title_esc)</h1>
+      <p>$(intro_esc)</p>
+      <p><small>Generated $(generated_at)</small></p>
+      <h2>Files</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Size</th><th>Modified</th></tr></thead>
+        <tbody>
+            $(rows)
+        </tbody>
+      </table>$(subdir_section)
+    </main>
+  </body>
+</html>
+"""
+end
+
+# Walks `output_dir`, writes index.html at top level + one per `archive_*/`.
+# Treats `checkpoint/` and any other non-archive subdirs as opaque (no index).
+function _write_recompute_index(output_dir::AbstractString)
+    isdir(output_dir) || return nothing
+
+    files = String[]
+    archive_dirs = String[]
+    for entry in readdir(output_dir)
+        full = joinpath(output_dir, entry)
+        if isdir(full)
+            startswith(entry, "archive_") && push!(archive_dirs, entry)
+        else
+            entry == "index.html" && continue
+            occursin(".tmp.", entry) && continue
+            push!(files, entry)
+        end
+    end
+    sort!(files, by = f -> mtime(joinpath(output_dir, f)), rev = true)
+    sort!(archive_dirs, rev = true)
+
+    top_html = _render_index_html(;
+        title = "Recompute outputs",
+        intro = "Top-level files are the latest run's outputs (latest cache files have no date in their name). " *
+                "Archive subdirectories preserve previous runs.",
+        files = [(name = f, size = filesize(joinpath(output_dir, f)), mtime = mtime(joinpath(output_dir, f))) for f in files],
+        subdirs = archive_dirs,
+        parent_link = "/",
+    )
+    write(joinpath(output_dir, "index.html"), top_html)
+
+    for ad in archive_dirs
+        adir = joinpath(output_dir, ad)
+        afiles = String[]
+        for entry in readdir(adir)
+            entry == "index.html" && continue
+            isfile(joinpath(adir, entry)) || continue
+            push!(afiles, entry)
+        end
+        sort!(afiles, by = f -> mtime(joinpath(adir, f)), rev = true)
+        archive_html = _render_index_html(;
+            title = "Archive: " * ad,
+            intro = "Archived recompute outputs from a previous run.",
+            files = [(name = f, size = filesize(joinpath(adir, f)), mtime = mtime(joinpath(adir, f))) for f in afiles],
+            subdirs = String[],
+            parent_link = "../",
+        )
+        write(joinpath(adir, "index.html"), archive_html)
+    end
+    return nothing
 end
