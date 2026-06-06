@@ -885,17 +885,22 @@ function update_annotations_cache(
             dataset_path = join(change_key_parts[begin:end-4], "\\")
             annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
         end
-        # Could error if dataset_path is not in key_map_dict
-        if !haskey(key_map_dict, dataset_path)
-            @warn "Dataset path $dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
-            continue
-        end
-        annotations_cache_key = key_map_dict[dataset_path]
+        # Normalize the change-file's Windows-style "X:\..." path to the local
+        # Linux path BEFORE looking it up: the live annotations_cache is keyed by
+        # the Linux dataset path (from priming via
+        # load_straightened_annotations_over_time), so matching against the raw
+        # "X:\..." string silently misses every change.
         local_dataset_path = dataset_path
         if Sys.isunix()
             local_dataset_path = replace(local_dataset_path, raw"X:\\" => "/nearline/shroff/")
             local_dataset_path = replace(local_dataset_path, "\\" => "/")
         end
+        # Could error if local_dataset_path is not in key_map_dict
+        if !haskey(key_map_dict, local_dataset_path)
+            @warn "Dataset path $local_dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
+            continue
+        end
+        annotations_cache_key = key_map_dict[local_dataset_path]
         dataset = ShroffCelegansModels.Dataset(local_dataset_path)
         annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
         if isnothing(annotation_symbol)
