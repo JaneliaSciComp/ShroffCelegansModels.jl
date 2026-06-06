@@ -38,6 +38,10 @@ spec:
               readOnly: true
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
+            - name: annotations
+              mountPath: /var/www/recompute
+              subPath: recompute
+              readOnly: true
           resources:
             requests:
               cpu: 100m
