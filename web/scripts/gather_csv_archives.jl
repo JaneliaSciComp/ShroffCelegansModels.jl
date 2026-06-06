@@ -40,10 +40,21 @@ end
 """
     gather_dataset_csvs(dataset_path_linux, archive_path)
 
-Run `find <rel> -name "*.csv" -print0 | tar czf <archive> -C /nearline/shroff
---null --files-from -`, so archive contents have paths relative to
-`/nearline/shroff/`. Unpacking into a directory tree restores the
-shroff-relative structure.
+Bundles into `archive_path` (tar.gz) every file the recompute pipeline
+might read for this dataset, with paths relative to `/nearline/shroff/`.
+
+Includes:
+  - Parent-of-dataset.path, one level only:
+      * `cell_key.json` / `CellKey.csv` (required by datasets.jl)
+      * `MissedSegs_*.csv` (auxiliary)
+      * any other `*.csv` / `*.json` siblings at that level
+  - `dataset.path` recursively: all `*.csv` and `*.json`
+
+Excludes:
+  - `*/model_contours/*`  — `wormContours.csv` files account for ~76% of
+    raw bytes and aren't consumed by the pipeline (the in-memory
+    `get_model_contour_mesh(model)` overload synthesizes the mesh from
+    the CelegansModel directly; the file-path overload is unused).
 """
 function gather_dataset_csvs(
     dataset_path_linux::AbstractString,
@@ -51,18 +62,36 @@ function gather_dataset_csvs(
     base::AbstractString = NEARLINE_BASE,
 )
     isdir(dataset_path_linux) || error("Dataset path does not exist: $dataset_path_linux")
-    rel = relpath(dataset_path_linux, base)
-    tmp = string(archive_path, ".tmp.", getpid(), ".", time_ns())
+    rel_ds = relpath(dataset_path_linux, base)
+    rel_parent = relpath(dirname(dataset_path_linux), base)
+
+    tmp_archive = string(archive_path, ".tmp.", getpid(), ".", time_ns())
+    tmp_list = tempname()
     try
-        # Cmd(..., dir=base) makes `find rel ...` resolve relative to base
-        # without changing process cwd.
-        find_cmd = Cmd(`find $rel -type f -name "*.csv" -print0`; dir = base)
-        tar_cmd  = `tar czf $tmp -C $base --null --files-from -`
-        run(pipeline(find_cmd, tar_cmd))
-        mv(tmp, archive_path; force = true)
+        open(tmp_list, "w") do io
+            # Parent dir, one level only — picks up cell_key.json,
+            # CellKey.csv, MissedSegs_*.csv, etc.
+            parent_find = Cmd(
+                `find $rel_parent -maxdepth 1 -type f \( -name "*.csv" -o -name "*.json" \) -print0`;
+                dir = base,
+            )
+            run(pipeline(parent_find, stdout = io))
+
+            # dataset.path recursively, excluding model_contours/.
+            ds_find = Cmd(
+                `find $rel_ds -type f \( -name "*.csv" -o -name "*.json" \) -not -path "*/model_contours/*" -print0`;
+                dir = base,
+            )
+            run(pipeline(ds_find, stdout = io))
+        end
+
+        run(`tar czf $tmp_archive -C $base --null --files-from $tmp_list`)
+        mv(tmp_archive, archive_path; force = true)
     catch
-        isfile(tmp) && rm(tmp; force = true)
+        isfile(tmp_archive) && rm(tmp_archive; force = true)
         rethrow()
+    finally
+        isfile(tmp_list) && rm(tmp_list; force = true)
     end
     return archive_path
 end
