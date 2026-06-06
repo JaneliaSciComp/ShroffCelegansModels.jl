@@ -6,7 +6,6 @@ using ShroffCelegansModels.JSON3
 using ShroffCelegansModels.Dates
 using ShroffCelegansModels.Sockets
 using ShroffCelegansModels.HDF5
-using ShroffCelegansModels: swapyz_scale
 
 
 const ANNOTATION_PERSIST_SERVER_PORT = 3129
