@@ -1,4 +1,8 @@
-function load_straightened_annotations_over_time(dataset::ShroffCelegansModels.Datasets.NormalizedDataset, offsets::UnitRange = 1:length(range(dataset.cell_key)); use_myuntwist::Bool = false)
+function load_straightened_annotations_over_time(
+    dataset::ShroffCelegansModels.Datasets.NormalizedDataset,
+    offsets::UnitRange{Int} = 1:length(range(dataset.cell_key));
+    use_myuntwist::Bool = false
+)::Vector{Union{Missing, Dict{String, Point3d}}}
     key = (dataset.path, offsets, use_myuntwist)
     if haskey(annotations_cache, key)
         return annotations_cache[key]
@@ -16,11 +20,19 @@ function load_straightened_annotations_over_time(dataset::ShroffCelegansModels.D
                 return missing
             end
             annotation_df = CSV.read(path, DataFrame)
-            pts = Point3f.(eachrow(Matrix(annotation_df)[:, 2:4]))
+            pts = Point3d.(eachrow(Matrix(annotation_df)[:, 2:4]))
             pts .-= get_straightened_lattice_xy_center(dataset, time_offset)
-            Dict(annotation_df[:,1] .=> pts)
+            Dict{String, Point3d}(annotation_df[:,1] .=> pts)
         end
         annotations_cache[key] = annotations
         return annotations
     end
+end
+
+function annotations_cache_key(
+    dataset::ShroffCelegansModels.Datasets.NormalizedDataset,
+    offsets = 1:length(range(dataset.cell_key)),
+    use_myuntwist = true
+)
+    return (dataset.path, offsets, use_myuntwist)
 end

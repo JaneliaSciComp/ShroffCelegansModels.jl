@@ -43,11 +43,22 @@ include("demo_averaging/get_cell_trajectory_dict.jl")
 include("demo_averaging/save_cache.jl")
 
 # initialize my_annotation_position_cache
-@info "Loading straightened annotation positions..."
-load_annotation_cache()
-@info "Loading warped annotation positions..."
-load_annotations_cache()
-
+try
+    if isempty(my_annotation_position_cache)
+        @info "Loading straightened annotation positions..."
+        load_annotation_cache()
+    end
+catch err
+    @warn "There was an issue loading the annotation cache" err
+end
+try
+    if isempty(annotations_cache)
+        @info "Loading warped annotation positions..."
+        load_annotations_cache()
+    end
+catch err
+    @warn "There was an issue loading the my annotation cache" err
+end
 
 function save_annotation_position_cache(
     filename::String,
@@ -153,7 +164,12 @@ function save_annotation_position_cache(
                     end
                     attrs(attributed_obj)["path"] = embryo.path
                     attrs(attributed_obj)["normalized_time"] = collect(timepoints)
-                    attrs(attributed_obj)["standard_minutes_post_fertilization"] = collect(timepoints .* 420 .+ 420)
+                    if num_timepoints == 371
+                        attrs(attributed_obj)["standard_minutes_post_fertilization"] = collect(timepoints .* 370 .+ 381)
+                    else
+                        # num_timepoints == 201, which corresponds to 421 to 840 minutes
+                        attrs(attributed_obj)["standard_minutes_post_fertilization"] = collect(timepoints .* 420 .+ 420)
+                    end
                 catch err
                     #display(err)
                     # println(err)
@@ -178,7 +194,9 @@ function save_annotation_position_cache_all_dated(datasets::Dict{String, Vector{
 
     date_str = "$(Dates.today())"
     date_str = replace(date_str, "-" => "_")
-    for (timepoints, expanded) in Iterators.product((:raw, 420), (true, false))
+    # resampled_timepoints = 420, when we were doing 421 to 840 minutes
+    resampled_timepoints = 371 # 381 to 751
+    for (timepoints, expanded) in Iterators.product((:raw, resampled_timepoints), (true, false))
         tp_str = string(timepoints)
         if expanded
             tp_str *= "_expanded"

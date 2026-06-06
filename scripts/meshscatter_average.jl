@@ -16,7 +16,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     colors_dict = load_colors_dict()
     function get_color(annotation)
         annotation = lowercase(annotation)
-        annotation = replace(annotation, "/" => "_")
+        #annotation = replace(annotation, "/" => "_")
         get(colors_dict, annotation, RGBf(1,1,1))
     end
 

@@ -1,0 +1,28 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: shroff-data
+  namespace: shroff-data
+spec:
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: deployment/Dockerfile
+      from:
+        kind: ImageStreamTag
+        name: shroff-data-base:latest
+        namespace: shroff-data
+  output:
+    to:
+      kind: ImageStreamTag
+      name: shroff-data:latest
+  triggers: []
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: shroff-data
+  namespace: shroff-data

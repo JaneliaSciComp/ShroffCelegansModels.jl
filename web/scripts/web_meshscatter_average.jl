@@ -24,8 +24,8 @@ function meshscatter_average_webapp()
             black_body(meshscatter_average(average_annotation_dict; nerve_ring=true))
         end
     end
-    server = Server(app, "shroff-data.int.janelia.org", 8380;
-        proxy_url="https://shroff-data.int.janelia.org/meshscatter_average/"
+    server = Server(app, "0.0.0.0", 8380;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/meshscatter_average/"
     )
     route!(server, "/nerve_ring" => nerve_ring_app)
     return server

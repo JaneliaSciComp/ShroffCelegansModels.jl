@@ -203,16 +203,24 @@ function debug_annotation_ap_axis(
         alpha = 0.5,
         inspectable = false
     )
-    connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    # connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    on(contour_mesh_toggle.active) do s
+        twisted_mesh_plot.visible = s
+    end
     lines!(ax_twisted, twisted_central_spline)
     scatter!(ax_twisted, twisted_central_pts)
     cs_lines = lines!(ax_twisted, twisted_central_line_match)
-    connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    # connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    on(central_spline_lines_toggle.active) do s
+        central_spline_lines_toggle.visible = s
+    end
     meshscatter!(ax_twisted, twisted_seam_cells; markersize = 1.0, color = :gray, alpha = 0.5, transparency = true)
     ms_annotation_cells = meshscatter!(ax_twisted, twisted_annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 0.5, transparency = true)
     text!(ax_twisted, twisted_seam_cell_labels; text = twisted_seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax_twisted, twisted_annotation_cells; text = twisted_annotation_text, align = (:right, :bottom))
-    connect!(ann_txt.visible, annotation_text_toggle.active)
+    on(annotation_text_toggle.active) do s
+        ann_txt.visible = s
+    end
     @info "twisted_seam_cell_labels" twisted_seam_cell_labels[] tmodel.names
 
     distances = Observable(Float64[])
@@ -226,21 +234,17 @@ function debug_annotation_ap_axis(
     z = LinRange(0, 1, Npts)
     # max_distance = Observable(max_r.(z) .* voxel_size .* first(sliders.sliders[2].range[]))
     max_distance = Observable(Float64[])
-    lines!(ax_distance, central_spline_arc_lengths, distances)
+    distances_lines = lines!(ax_distance, central_spline_arc_lengths[], distances[])
     hlines!(ax_distance, selected_distance)
-    lines!(ax_distance, central_spline_arc_lengths, max_distance)
-    scatter!(ax_distance, central_spline_arc_lengths, distances, color = distances, colormap = Reverse(:viridis))
-    scatter!(ax_twisted, distance_central_pts, color = distances, colormap = Reverse(:viridis))
+    max_distance_lines = lines!(ax_distance, central_spline_arc_lengths[], max_distance)
+    distances_scatter = scatter!(ax_distance, central_spline_arc_lengths[], distances[], color = distances[], colormap = Reverse(:viridis))
+    distance_central_pts_scatter = scatter!(ax_twisted, distance_central_pts, color = distances[], colormap = Reverse(:viridis))
     selected_twisted_annotation_cell = Observable([twisted_annotation_cells[][selected_annotation_idx[]]])
     meshscatter!(ax_twisted, selected_twisted_annotation_cell, color = :red, markersize=1.1)
 
-    ratio = @lift try
-        $distances ./ $max_distance
-    catch err
-        ones(size($max_distance))
-    end
-    lines!(ax_ratio, central_spline_arc_lengths, ratio)
-    hlines!(ax_ratio, 1.0, linestyle = :dash)
+    ratio = Observable(distances[])
+    ratio_lines = lines!(ax_ratio, central_spline_arc_lengths[], ratio)
+    hlines!(ax_ratio, 1.0, linestyle = :solid)
 
     nt_obs = Observable(0.0) 
 
@@ -342,19 +346,31 @@ function debug_annotation_ap_axis(
         Npts = length(tmodel)
         z = LinRange(0, 1, Npts)
         central_pts = swapyz_scale.(cs.(z))
-        central_spline_arc_lengths.val = [0; cumsum(norm.(diff(central_pts)))]
-        distance_central_pts[] = central_pts
+        _central_spline_arc_lengths = [0; cumsum(norm.(diff(central_pts)))]
+        central_spline_arc_lengths[] = _central_spline_arc_lengths
+        # distance_central_pts[] = central_pts
 
         max_r = ShroffCelegansModels.max_radius_function(tmodel)
         expansion_factor_value = sliders.sliders[3].value[]
-        max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        _max_distance = max_r.(z) .* voxel_size .* expansion_factor_value
+        # max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        Makie.update!(max_distance_lines, arg1 = _central_spline_arc_lengths, arg2 = _max_distance)
 
         pt = twisted_annotation_cells[][idx]
-        distances[] = norm.(central_pts .- pt)
+        _distances = norm.(central_pts .- pt)
+        distances[] = _distances
+        # distances[] = norm.(central_pts .- pt)
+        Makie.update!(distances_lines, arg1 = _central_spline_arc_lengths, arg2 = _distances)
+        Makie.update!(distances_scatter, arg1 = _central_spline_arc_lengths, arg2 = _distances, color = _distances)
+        Makie.update!(distance_central_pts_scatter, arg1 = central_pts, color = _distances)
+
+        _ratio = _distances ./ _max_distance
+        Makie.update!(ratio_lines, arg1 = _central_spline_arc_lengths, arg2 = _ratio)
+
         #autolimits!(ax_distance)
         #ylims!(ax_distance, nothing)
-        limits!(ax_distance, (0, 200), (0, maximum(distances[])))
-        limits!(ax_ratio, (0, 200), (0, maximum(ratio[])))
+        limits!(ax_distance, (0, 200), (0, maximum(_distances)))
+        limits!(ax_ratio, (0, 200), (0, maximum(_ratio)))
         selected_distance[] = norm(twisted_central_pts[][idx] - pt)
 
         selected_annotation_name[] = twisted_annotation_text[][idx]

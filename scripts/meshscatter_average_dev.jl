@@ -2,6 +2,7 @@ using Makie
 using Makie: throttle, Button
 using Printf
 using GeometryBasics
+using ShroffCelegansModels: swapyz_scale
 
 include("crop_video.jl")
 
@@ -20,8 +21,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
     colors_dict = load_colors_dict()
     function get_color(annotation)
         annotation = lowercase(annotation)
-        annotation = replace(annotation, "/" => "_")
-        get(colors_dict, annotation, RGBAf(0,0,0,0))
+        #annotation = replace(annotation, "/" => "_")
+        get(colors_dict, annotation, RGBAf(1,1,1,1))
     end
 
     # Font size
@@ -29,7 +30,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     # HPF Label
     label_offset = 8
-    time_text = Observable("hpf = 14:00")
+    time_text = Observable("hpf = 12:31")
     text!(-label_offset, 0, label_offset; text = time_text, fontsize=_fontsize)
 
     # Scalebar
@@ -159,7 +160,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     time_points = axes(first(coordinates).positions, 1)
     controls_visible = Observable(true)
-    time_slider = Makie.Slider(fig[2,1:max_columns], range = time_points, startvalue = 201)
+    time_slider = Makie.Slider(fig[2,1:max_columns], range = time_points, startvalue = length(time_points))
     #grid = GridLayout(tellwidth = false, tellheight = false, height = Fixed(5))
     xy_button = Button(fig; label = "XY", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
     xz_button = Button(fig; label = "XZ", buttoncolor = RGBf(0.5, 0.5, 0.5), tellwidth = false)
@@ -198,8 +199,12 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
 
     zoom!(ax.scene, 4)
     on(throttle(0.1, time_slider.value)) do t
-        total_minutes = (t-1)/200*420
-        hours = 7 + round(Int, total_minutes/60, RoundDown)
+        # total_minutes = (t-1+11)/200*370
+        # First time point: 381 minutes (6h21m), t=1
+        # Last time point: 751 minutes (12h31m), t=length(time_points)
+        # Total Minutes past 6 hours (360 minutes)
+        total_minutes = (t-1+21)/(length(time_points)-1)*370
+        hours = 6 + round(Int, total_minutes/60, RoundDown)
         minutes = round(Int, mod(total_minutes, 60), RoundDown)
         time_text[] = "hpf = $hours:$(@sprintf("%02d", minutes))"
         if xy_bounding_radius > 0
@@ -270,7 +275,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
         controls_visible[] = true
         if !isnothing(session)
-            evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
+            #evaljs(session, js"""document.getElementById("video_recording").scrollIntoView(true)""")
         end
     end
 
@@ -292,13 +297,17 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
             for (i, v) in enumerate(coordinates)
                 s[i][] = v[t]
             end
-            sleep(0.05)
+            sleep(0.05)s
         end
     end
     =#
     #DOM.body(fig, style=Styles(CSS("background-color" => "black")))
     DataInspector(fig; backgroundcolor = :black)
-    DOM.div(fig, vid)
+    if Makie.current_backend() == WGLMakie
+        DOM.div(fig, vid)
+    else
+        fig
+    end
 end
 #with_theme(meshscatter_all, theme_black())
 #set_theme!(theme_black())

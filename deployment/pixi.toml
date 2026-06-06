@@ -1,0 +1,12 @@
+[workspace]
+authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org>"]
+channels = ["conda-forge"]
+name = "deployment"
+platforms = ["linux-64", "win-64"]
+version = "0.1.0"
+
+[tasks]
+download-annotation-changes = { cmd = "julia download_annotation_changes.jl" }
+
+[dependencies]
+openshift-cli = ">=4.20.2,<5"

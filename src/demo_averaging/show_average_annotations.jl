@@ -1,10 +1,14 @@
-using ProgressMeter
-using Statistics: mean, var
-using CoordinateTransformations
-using FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels.ProgressMeter
+using ShroffCelegansModels.Statistics: mean, var
+using ShroffCelegansModels.CoordinateTransformations
+using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels: swapyz_scale, swapyz_unscale, transverse_splines
+using ShroffCelegansModels.ColorSchemes: colorschemes
+using ShroffCelegansModels.GeometryBasics: Point3, Point3f
+using ShroffCelegansModels.Observables: throttle
 
-include("../makie.jl")
-include("get_group_annotation_positions_over_time.jl")
+#include("../makie.jl")
+#include("get_group_annotation_positions_over_time.jl")
 
 function show_average_annotations(
     avg_models::Vector{<: ShroffCelegansModels.Types.CelegansModel},
@@ -35,9 +39,8 @@ function show_average_annotations(
     xlims!(ax_2d_3, (0,1))
     ylims!(ax_2d_3, (0, 250))
     # xlabel!("Time (Normalized)")
-
-
-    N_timepoints = 200
+   
+    N_timepoints = length(avg_models) - 1
     r = LinRange(0.0, 1.0, N_timepoints + 1)
     sliders = SliderGrid(f[4,1:3],
         (label="Time (Normalized)", range=r),
@@ -51,24 +54,23 @@ function show_average_annotations(
     annotation_text_toggle = Toggle(f)
     pre_warp_toggle = Toggle(f)
     polar_view_toggle = Toggle(f)
-    menu_options = Observable(String[""])
-    annotation_menu = Menu(f; options = menu_options)
-    f[5, 1:3] = grid!(
-            [1,1] => Label(f, "Annnotation text"),
-            [1,2] => annotation_text_toggle,
-            [1,3] => Label(f, "Pre-warp"),
-            [1,4] => pre_warp_toggle,
-            [1,5] => Label(f, "Annotation"),
-            [1,6] => annotation_menu,
-            [1,7] => Label(f, "Polar View"),
-            [1,8] => polar_view_toggle,
-    )
+    #menu_options = Observable(String["temp"])
+    #annotation_menu = Menu(f; options = menu_options)
+
+    f[5, 1:3] = toggles = GridLayout()
+    toggles[1, 1:7] = [
+        Label(f, "Annnotation text"),
+        annotation_text_toggle,
+        Label(f, "Pre-warp"),
+        pre_warp_toggle,
+        Label(f, "Polar View"),
+        polar_view_toggle,
+        Label(f, "Annotation"),
+    ]
 
     _common_path = common_path(datasets)
     _path = Observable(_common_path)
     Label(f[6, 1:3], _path)
-
-
 
     n_upsample = 2
     # dataset = first(datasets)
@@ -149,14 +151,17 @@ function show_average_annotations(
     =#
 
     model = avg_models[end]
-
+    
     seam_cell_text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]]
-    menu_options[] = [common_annotations; seam_cell_text]
+    #menu_options[] = [common_annotations; seam_cell_text]
+    annotation_menu = Menu(f; options = [common_annotations; seam_cell_text])
+    toggles[1,8] = annotation_menu
 
     _mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale))
     #_lines = Observable(swapyz.(cross_sections_at_knots(model)))
     _seam_cells = Observable(swapyz_scale.(seam_cell_pts(model, n_upsample)))
     _seam_cell_labels = Observable(_seam_cells[] .- Ref(Point3f(2,0,0)))
+
 
     function annotation_positions(smts_nt, annotation_dict, nt)
         _smodel = smts_nt(nt)
@@ -225,7 +230,7 @@ function show_average_annotations(
         end
     end # Vector{Vector{Dict{String, Point3{Float64}}}} # dataset, normalized time, name => position
     =#
-    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache)
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache, LinRange(0,1,length(avg_models)); avg_models)
 
     # averaging
     _annotation_positions_over_time = map(eachindex(r)) do j
@@ -308,7 +313,10 @@ function show_average_annotations(
     meshscatter!(ax, _selected_annotation; markersize = 1.0, color = :red, alpha = 1, inspectable = false)
     text!(ax, _seam_cell_labels; text = seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax, _annotation_cells; text = _annotation_text, align = (:right, :bottom))
-    connect!(ann_txt.visible, annotation_text_toggle.active)
+    ann_txt.visible=false
+    on(annotation_text_toggle.active) do status
+        ann_txt.visible = status
+    end
     #lines!(ax, _lines, color = :black)
     # ylims!(ax, (0, 200))
     ranges_labels = ax.scene[OldAxis][:ticks, :ranges_labels][]
@@ -368,10 +376,10 @@ function show_average_annotations(
             Point2(polar_coord.θ, polar_coord.r)
         end
     end
-    lines!(polar_ax, polar_track; color = track3d_color, colormap = :lajolla)
-    scatter!(polar_ax, polar_annotations; color = scatter_color)
-    scatter!(polar_ax, polar_annotation_selected; color = :red)
-    text!(polar_ax, polar_annotations; text = common_annotations)
+    #lines!(polar_ax, polar_track; color = track3d_color, colormap = :lajolla)
+    #scatter!(polar_ax, polar_annotations; color = scatter_color)
+    #scatter!(polar_ax, polar_annotation_selected; color = :red)
+    #text!(polar_ax, polar_annotations; text = common_annotations)
 
     # selected annotation index
     a = nothing
@@ -458,7 +466,7 @@ function show_average_annotations(
 
     on(throttle(0.1, sliders.sliders[2].value)) do smooth_factor
         value = sliders.sliders[1].value[]
-        idx = round(Int, value*200 + 1)
+        idx = round(Int, value*N_timepoints + 1)
         smooth_factor_θ = sliders.sliders[3].value[]
         smooth_factor_z = sliders.sliders[4].value[]
         if smooth_factor > 0 || smooth_factor_θ > 0 || smooth_factor_z > 0

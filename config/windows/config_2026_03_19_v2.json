@@ -1,0 +1,362 @@
+{
+	"settings": {
+		"folderpaths": {
+			"side": "RegB",
+			"data_folderpath": "Decon_reg_#\\Decon_reg_#_results",
+			"straightened_seam_cells": "straightened_seamcells\\straightened_seamcells.csv",
+			"straightened_annotations": "straightened_annotations\\straightened_annotations.csv",
+			"straightened_lattice": "straightened_lattice\\straightened_lattice.csv",
+			"twisted_seam_cells": "seam_cell_final\\seam_cells.csv",
+			"twisted_annotations": "integrated_annotation\\annotations.csv",
+			"twisted_lattice": "lattice_final\\lattice.csv"
+		},
+		"voxel_to_micron_scale": [
+			0.1625,
+			0.1625,
+			0.1625
+		],
+		"outlier_removal": {
+			"remove_outliers": true,
+			"n_stdev": 2,
+			"window_size": 10,
+			"early_window_size": 10
+		},
+		"interpolation": {
+			"total_min": 420,
+			"min_timepoints_required": 2,
+			"method": "linear",
+			"seam_cells_on": {
+				"H0L": 0,
+				"H0R": 0,
+				"H1L": 0,
+				"H1R": 0,
+				"H2L": 0,
+				"H2R": 0,
+				"V1R": 0,
+				"V1L": 0,
+				"V2R": 0,
+				"V2L": 0,
+				"V3R": 0,
+				"V3L": 0,
+				"V4L": 0,
+				"V4R": 0,
+				"QL": 0.667,
+				"QR": 0.667,
+				"V5L": 0,
+				"V5R": 0,
+				"V6L": 0,
+				"V6R": 0,
+				"TL": 0,
+				"TR": 0
+			}
+		},
+		"warping": {
+			"z_padding": 100,
+			"radial_correction": 1,
+			"seam_cells": [
+				"H0L",
+				"H0R",
+				"H1L",
+				"H1R",
+				"H2L",
+				"H2R",
+				"V1R",
+				"V1L",
+				"V2R",
+				"V2L",
+				"V3R",
+				"V3L",
+				"V4L",
+				"V4R",
+				"V5L",
+				"V5R",
+				"V6L",
+				"V6R",
+				"TL",
+				"TR"
+			]
+		},
+		"smoothing": {
+			"method": "sgolay",
+			"window_size": 90
+		},
+		"mipav_output": {
+			"labels_on": false,
+			"cell_info": "cell_info.json"
+		}
+	},
+	"data": {
+		"seam_cells": [
+			"X:\\shrofflab\\OD1599_NU\\120619_Pos2\\Decon_reg",
+			"X:\\shrofflab\\OD1599_NU\\112719_Pos3\\Decon_Reg",
+			"X:\\shrofflab\\OD1599_NU\\112619_Pos0\\Decon_reg",
+			"X:\\shrofflab\\DCR6485_RPM1_NU\\011419_RC\\DCR6485_NU\\DCR6485_NU\\DCR6485_NU\\Pos0\\SPIMB\\Decon",
+			"X:\\shrofflab\\DCR6485_RPM1_NU\\011419_RC\\DCR6485_NU\\DCR6485_NU\\DCR6485_NU\\Pos4\\SPIMB\\Decon_Reg",
+			"X:\\shrofflab\\DCR6485_RPM1_NU\\021020_RC\\DCR6485_NU_1\\DCR6485_NU_1\\Pos2\\SPIMB\\Decon",
+			"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\082619_Pos3",
+			"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\091119_Pos2",
+			"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\091119_Pos3",
+			"X:\\shrofflab\\RW10131\\Data\\052918_Pos0\\Decon_registered",
+			"X:\\shrofflab\\RW10131\\Data\\052918_Pos1\\Decon_registered",
+			"X:\\shrofflab\\RW10896\\Postwitching\\Pos1\\Decon_registered",
+			"X:\\shrofflab\\RW10896\\Postwitching\\Pos4\\Decon_registered",
+			"X:\\shrofflab\\RW10896\\Postwitching\\Pos6\\Decon_registered",
+			"X:\\shrofflab\\RW10752_NU\\Untwisting\\031219_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos1\\Decon_registered",
+			"X:\\shrofflab\\RW10752_NU\\Untwisting\\022519_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos0\\Decon_registered",
+			"X:\\shrofflab\\RW10584\\051817\\Decon_reg",
+			"X:\\shrofflab\\RW10584\\052517\\Decon_reg",
+			"X:\\shrofflab\\RW10584\\101017\\Decon_reg",
+			"X:\\shrofflab\\RW10598\\Data\\Pos4-bgsub_95_iteration_5\\Decon_registered",
+			"X:\\shrofflab\\RW10598\\Data\\598_Slitscan_6um_5min_Pos1\\Decon_registered",
+			"X:\\shrofflab\\RW10598\\Data\\Pos0\\Decon_registered",
+			"X:\\shrofflab\\RW10375\\Pos0\\SPIMB\\Reg_Sample\\ForTracking",
+			"X:\\shrofflab\\RW10375\\Pos1\\SPIMB\\Reg_Sample\\ForTracking",
+			"X:\\shrofflab\\RW10375\\Pos2\\SPIMB\\Reg_Sample\\ForTracking",
+			"X:\\shrofflab\\RW10557\\031021\\Pos0\\segmentation",
+			"X:\\shrofflab\\RW10557\\031021\\Pos1\\Segmentation",
+			"X:\\shrofflab\\RW10557\\031021\\Pos2\\segmentation",
+			"X:\\shrofflab\\RW10753\\Tracking\\Pos6",
+			"X:\\shrofflab\\RW10753\\Tracking\\Pos2",
+			"X:\\shrofflab\\RW10753\\Tracking\\Pos1",
+			"X:\\shrofflab\\RW10742\\Tracking\\Pos1\\Segmentation",
+			"X:\\shrofflab\\RW10742\\Tracking\\Pos4\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\RW10742\\Tracking\\Pos5\\For_Tracking",
+			"X:\\shrofflab\\RW10711\\Tracking\\Pos0\\For_Tracking",
+			"X:\\shrofflab\\RW10711\\Tracking\\Pos1\\For_Tracking",
+			"X:\\shrofflab\\RW10711\\Tracking\\Pos3",
+			"X:\\shrofflab\\Vab-1\\Tracking\\Pos0\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\Vab-1\\Tracking\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\Vab-1\\Tracking\\Pos3\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\efn-1\\Tracking\\Pos0\\For_Tracking",
+			"X:\\shrofflab\\efn-1\\Tracking\\Pos3\\For_Tracking",
+			"X:\\shrofflab\\efn-1\\Tracking\\Pos4\\For_Tracking",
+			"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos1\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos6\\SPIMB\\Reg_Sample\\For_Tracking",
+			"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\063014_lattices_Javier - UTP 1\\Decon_reg",
+			"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311-US_5min_3 - UTP 2\\Decon_reg",
+			"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_2 - UTP 3\\Decon_reg",
+			"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_4 - UTP 4\\Decon_reg",
+			"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_1 - UTP 5\\Decon_reg",
+			"X:\\shrofflab\\RW10752_NU\\Untwisting\\031219_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos2\\SPIMB\\For_Tracking\\For_Tracking"
+		],
+		"strains": [
+			{
+				"name": "OD1599_NU",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\OD1599_NU\\120619_Pos2\\Decon_reg",
+					"X:\\shrofflab\\OD1599_NU\\112719_Pos3\\Decon_Reg",
+					"X:\\shrofflab\\OD1599_NU\\112619_Pos0\\Decon_reg"
+				]
+			},
+			{
+				"name": "DCR6485_RPM1_NU",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\DCR6485_RPM1_NU\\011419_RC\\DCR6485_NU\\DCR6485_NU\\DCR6485_NU\\Pos0\\SPIMB\\Decon",
+					"X:\\shrofflab\\DCR6485_RPM1_NU\\011419_RC\\DCR6485_NU\\DCR6485_NU\\DCR6485_NU\\Pos4\\SPIMB\\Decon_Reg",
+					"X:\\shrofflab\\DCR6485_RPM1_NU\\021020_RC\\DCR6485_NU_1\\DCR6485_NU_1\\Pos2\\SPIMB\\Decon"
+				]
+			},
+			{
+				"name": "JCC596_NU",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\091119_Pos3",
+					"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\091119_Pos2",
+        			"X:\\shrofflab\\JCC596_NU\\Untwisting_Redo\\082619_Pos3"
+				]
+			},
+			{
+				"name": "KP9305_NU",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\Non-model C elegans folders\\KP9305_Activity_Full\\073019_KP9305_NU\\Pos0",
+					"X:\\shrofflab\\Non-model C elegans folders\\KP9305_Activity_Full\\073019_KP9305_NU\\Pos4",
+					"X:\\shrofflab\\Non-model C elegans folders\\KP9305_Activity_Full\\073019_KP9305_NU\\Pos2"
+				]
+			},
+			{
+				"name": "RW10131",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10131\\Data\\052918_Pos0\\Decon_registered",
+					"X:\\shrofflab\\RW10131\\Data\\052918_Pos1\\Decon_registered"
+				]
+			},
+			{
+				"name": "RW10896",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10896\\Postwitching\\Pos1\\Decon_registered",
+					"X:\\shrofflab\\RW10896\\Postwitching\\Pos4\\Decon_registered",
+					"X:\\shrofflab\\RW10896\\Postwitching\\Pos6\\Decon_registered"
+				]
+			},
+			{
+				"name": "RW10752_NU",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10752_NU\\Untwisting\\031219_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos2\\SPIMB\\For_Tracking\\For_Tracking",
+					"X:\\shrofflab\\RW10752_NU\\Untwisting\\031219_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos1\\Decon_registered",
+					"X:\\shrofflab\\RW10752_NU\\Untwisting\\022519_RW10752_NU\\RW10752_NU\\RW10752_NU\\Pos0\\Decon_registered"
+				]
+			},
+			{
+				"name": "RW10584",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10584\\051817\\Decon_reg",
+					"X:\\shrofflab\\RW10584\\052517\\Decon_reg",
+					"X:\\shrofflab\\RW10584\\101017\\Decon_reg"
+				]
+			},
+			{
+				"name": "RW10598",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10598\\Data\\Pos4-bgsub_95_iteration_5\\Decon_registered",
+					"X:\\shrofflab\\RW10598\\Data\\598_Slitscan_6um_5min_Pos1\\Decon_registered",
+					"X:\\shrofflab\\RW10598\\Data\\Pos0\\Decon_registered"
+				]
+			},
+			{
+				"name": "DCR4221",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_2 - UTP 3\\Decon_reg",
+					"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311-US_5min_3 - UTP 2\\Decon_reg",
+					"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_4 - UTP 4\\Decon_reg",
+					"X:\\shrofflab\\Non-model C elegans folders\\Untwisting_Paper\\DCR4221\\040215\\LE311 Data\\LE311_US_5min_1 - UTP 5\\Decon_reg"
+				]
+			},
+			{
+				"name": "RW10375",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10375\\Pos0\\SPIMB\\Reg_Sample\\ForTracking",
+					"X:\\shrofflab\\RW10375\\Pos1\\SPIMB\\Reg_Sample\\ForTracking",
+					"X:\\shrofflab\\RW10375\\Pos2\\SPIMB\\Reg_Sample\\ForTracking"
+				]
+			},
+			{
+				"name": "RW10557",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10557\\031021\\Pos0\\segmentation",
+					"X:\\shrofflab\\RW10557\\031021\\Pos1\\Segmentation",
+					"X:\\shrofflab\\RW10557\\031021\\Pos2\\segmentation"
+				]
+			},
+			{
+				"name": "RW10753",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10753\\Tracking\\Pos6",
+					"X:\\shrofflab\\RW10753\\Tracking\\Pos2",
+					"X:\\shrofflab\\RW10753\\Tracking\\Pos1"
+				]
+			},
+			{
+				"name": "RW10742",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10742\\Tracking\\Pos1\\Segmentation",
+					"X:\\shrofflab\\RW10742\\Tracking\\Pos4\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\RW10742\\Tracking\\Pos5\\For_Tracking"
+				]
+			},
+			{
+				"name": "RW10711",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\RW10711\\Tracking\\Pos0\\For_Tracking",
+					"X:\\shrofflab\\RW10711\\Tracking\\Pos1\\For_Tracking",
+					"X:\\shrofflab\\RW10711\\Tracking\\Pos3"
+				]
+			},
+			{
+				"name": "Vab-1",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\Vab-1\\Tracking\\Pos0\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\Vab-1\\Tracking\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\Vab-1\\Tracking\\Pos3\\SPIMB\\Reg_Sample\\For_Tracking"
+				]
+			},
+			{
+				"name": "efn-1",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\efn-1\\Tracking\\Pos0\\For_Tracking",
+					"X:\\shrofflab\\efn-1\\Tracking\\Pos3\\For_Tracking",
+					"X:\\shrofflab\\efn-1\\Tracking\\Pos4\\For_Tracking"
+				]
+			},
+			{
+				"name": "efn-2",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos1\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\efn-2\\120222_efn-2\\Pos6\\SPIMB\\Reg_Sample\\For_Tracking"
+				]
+			},
+			{
+				"name": "lin-26",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\lin-26_mSC\\Tracking\\0208\\SLS148_Untwisting\\Pos4\\SPIMA\\Reg_Sample\\Flipped_FT",
+					"X:\\shrofflab\\lin-26_mSC\\Tracking\\021323\\SLS148_SLS6\\Pos3\\SPIMB\\Reg_Sample\\Flipped_FT",
+					"X:\\shrofflab\\lin-26_mSC\\Tracking\\031523\\Pos4\\SPIMA\\Reg_Sample\\Flipped_FT"
+				]
+			},
+			{
+				"name": "CND-1",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\CND-1_RedUntwisting_A\\Tracking\\033023\\RedUT_A_cnd-1\\Pos3\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\CND-1_RedUntwisting_A\\Tracking\\033023\\RedUT_A_cnd-1\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\CND-1_RedUntwisting_A\\Tracking\\032423\\CND-1_RedUT\\Pos2\\SPIMA\\Reg_Sample\\For_Tracking"
+				]
+			},
+			{
+				"name": "Efn-4",
+				"include": true,
+				"folderpaths": [
+					"X:\\shrofflab\\Efn-4_RedUntwisting\\Tracking\\031723\\EFN-4_RedUT_A\\Pos4\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\Efn-4_RedUntwisting\\Tracking\\031723\\EFN-4_RedUT_A\\Pos1\\SPIMB\\Reg_Sample\\For_Tracking",
+					"X:\\shrofflab\\Efn-4_RedUntwisting\\Tracking\\031723\\EFN-4_RedUT_A\\Pos3\\SPIMB\\Reg_Sample\\For_Tracking"
+				]
+			},
+            {
+                "name": "RW10896_retracked",
+                "include": true,
+                "folderpaths": [
+                    "X:\\shrofflab\\RW10896\\Postwitching\\2023_imaging\\20231129\\RW10896_NU\\Pos1\\SPIMB\\Registered_Volumes\\For_Tracking",
+                    "X:\\shrofflab\\RW10896\\Postwitching\\2023_imaging\\20231129\\RW10896_NU\\Pos2\\SPIMB\\Registered_Volumes\\For_Tracking",
+                    "X:\\shrofflab\\RW10896\\Postwitching\\2023_imaging\\20231129\\RW10896_NU\\Pos3\\SPIMB\\Registered_Volumes\\For_Tracking"
+                ]
+            },
+            {
+                "name": "RW10131_retracked",
+                "include": true,
+                "folderpaths": [
+                    "X:\\shrofflab\\RW10131\\Data\\2024_SLS268\\20240401\\RW10131_SLS6_New\\Pos4\\SPIMB\\Reg_Sample\\For_Tracking",
+                    "X:\\shrofflab\\RW10131\\Data\\2024_SLS268\\20240429\\SLS268_RW10131_SLS6\\Pos1\\SPIMB\\Reg_Sample\\For_Tracking",
+                    "X:\\shrofflab\\RW10131\\Data\\2024_SLS268\\20240507\\Pos1\\SPIMA\\Reg_Sample\\For_Tracking"
+                ]
+            },
+            {
+                "name": "RW10598_retracked",
+                "include": true,
+                "folderpaths": [
+                    "X:\\shrofflab\\RW10598\\2023_Data\\Tracking\\20230718\\RW10598_NU\\Pos1\\SPIMB\\Reg_Sample\\For_Tracking",
+                    "X:\\shrofflab\\RW10598\\2023_Data\\Tracking\\20230718\\RW10598_NU\\Pos2\\SPIMB\\Reg_Sample\\For_Tracking",
+                    "X:\\shrofflab\\RW10598\\2023_Data\\Tracking\\20230719\\RW10598_NU\\Pos4\\SPIMB\\Reg_Sample\\For_Tracking"
+                ]
+            }
+		]
+	}
+}

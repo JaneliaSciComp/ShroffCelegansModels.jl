@@ -1,4 +1,4 @@
-using BSplineKit.SplineInterpolations: interpolation_points
+using ShroffCelegansModels.BSplineKit.SplineInterpolations: interpolation_points
 
 function seam_cell_pts(model, n_upsample)
     pts = interpolation_points(model)[1:2^n_upsample:end]

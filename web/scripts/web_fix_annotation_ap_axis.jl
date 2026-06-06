@@ -1,6 +1,8 @@
 using WGLMakie
 using Bonito
-
+using Revise
+using HTTP
+using URIs
 
 if abspath(PROGRAM_FILE) == @__FILE__
     global run_web_main::Bool = true
@@ -22,15 +24,25 @@ function web_debug_annotation_ap_axis(datasets = datasets)
         )
     )
     server = Server(
-        "shroff-data.int.janelia.org", 9381;
-        proxy_url="https://shroff-data.int.janelia.org/fix_annotation_ap_axis/"
+        "0.0.0.0", 9381;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/fix_annotation_ap_axis/"
     )
     route!(server, "/" => App(menu))
     for k in keys(datasets)
         for i in keys(datasets[k])
-            route!(server, "/$k/$i" => App(; title="$k[$i]: Shroff C. elegans fix annotation AP axis") do
+            @info "Creating routing /$k/$i for dataset $(datasets[k][i].path)"
+            route!(server, "/$k/$i" => App(; title="$k[$i]: Shroff C. elegans fix annotation AP axis") do session::Bonito.Session, request::HTTP.Request
                 empty!(annotations_cache)
-                return fix_annotation_ap_axis(avg_models, datasets[k][i]; use_myuntwist=true);
+                params = HTTP.URIs.queryparams(URI(request.target).query)
+                listener = (a,v) -> evaljs(session, js"history.replaceState(null, \"\", \"?annotation=\" + $a + \"&timepoint=$v\");")
+                return fix_annotation_ap_axis(
+                    avg_models,
+                    datasets[k][i];
+                    use_myuntwist=true,
+                    initial_timepoint=parse(Int64, get(params, "timepoint", "0")),
+                    initial_annotation=get(params, "annotation", nothing),
+                    annotation_timepoint_listener=listener
+                );
             end)
         end
     end

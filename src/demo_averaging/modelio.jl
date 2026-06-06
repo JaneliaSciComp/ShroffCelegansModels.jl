@@ -1,8 +1,8 @@
-using HDF5
-using Printf
-using BSplineKit: SplineInterpolation
-using GeometryBasics: Point3f, Point3
-using Makie
+using ShroffCelegansModels.HDF5
+using ShroffCelegansModels.Printf
+using ShroffCelegansModels.BSplineKit: SplineInterpolation
+using ShroffCelegansModels.GeometryBasics: Point3f, Point3
+using ShroffCelegansModels.Makie
 
 function save_celegans_model(
     parent::Union{HDF5.File, HDF5.Group},

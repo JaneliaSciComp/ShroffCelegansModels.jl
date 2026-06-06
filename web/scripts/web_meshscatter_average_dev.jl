@@ -1,6 +1,7 @@
 using WGLMakie
 using Bonito
 using ShroffCelegansModels
+using Sockets
 
 #push!(LOAD_PATH, "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl")
 push!(LOAD_PATH, dirname(dirname(pathof(ShroffCelegansModels))))
@@ -24,8 +25,10 @@ function meshscatter_average_webapp()
             black_body(meshscatter_average(average_annotation_dict; nerve_ring=true))
         end
     end
-    server = Server(app, "shroff-data.int.janelia.org", 8480;
-        proxy_url="https://shroff-data.int.janelia.org/meshscatter_average_dev/"
+
+    shroff_data_ip = "0.0.0.0",
+    server = Server(app, shroff_data_ip, 8480;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/meshscatter_average_dev/"
     )
     route!(server, "/nerve_ring" => nerve_ring_app)
     return server

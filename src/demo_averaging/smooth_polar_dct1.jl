@@ -1,5 +1,5 @@
-using CoordinateTransformations
-using FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels.CoordinateTransformations
+using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
 
 function smooth_polar_dct1(positions_over_time, σ_r, σ_θ, σ_z = 0)
     G(σ,s) = exp.(-fftfreq(s,s).^2 ./2 ./ σ^2)

@@ -1,19 +1,27 @@
-using Makie
 using ShroffCelegansModels
-using Printf
-using GeometryBasics
-using JSON3
-using Dates
-using Sockets
+using ShroffCelegansModels.Makie
+using ShroffCelegansModels.Printf
+using ShroffCelegansModels.GeometryBasics
+using ShroffCelegansModels.JSON3
+using ShroffCelegansModels.Dates
+using ShroffCelegansModels.Sockets
+using ShroffCelegansModels.HDF5
+using ShroffCelegansModels: swapyz_scale
+
 
 const ANNOTATION_PERSIST_SERVER_PORT = 3129
+
+annotation_changes_path() = get(ENV, "ANNOTATION_CHANGES_PATH", joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
 
 function fix_annotation_ap_axis(
     avg_models,
     dataset::ShroffCelegansModels.Datasets.NormalizedDataset;
     use_myuntwist::Bool = false,
     cache::Dict{String} = use_myuntwist ? my_annotation_position_cache : annotation_position_cache,
-    ip_address::Sockets.IPAddr = Sockets.getipaddr()
+    ip_address::Sockets.IPAddr = Sockets.getipaddr(),
+    initial_timepoint::Number = 0.0,
+    initial_annotation::Union{String, Nothing} = nothing,
+    annotation_timepoint_listener::Union{Function, Nothing} = nothing,
 )
     second(x) = x[2]
 
@@ -206,7 +214,14 @@ function fix_annotation_ap_axis(
 
     # annotation_menu = Menu(f[6, 1:2], options = twisted_annotation_text)
     menu_options = sort!(collect(values(dataset.cell_key.mapping)))
-    annotation_menu = Menu(f[6, 1:2], options = menu_options)
+
+    # Check if initial annotation is in menu options
+    if !isnothing(initial_annotation) && !(initial_annotation in menu_options)
+        @error "Initial annotation $initial_annotation not found in menu options"
+        initial_annotation = first(menu_options)
+    end
+    annotation_menu = Menu(f[6, 1:2], options = menu_options, default = initial_annotation)
+    @info "initial annotation" initial_annotation menu_options
     initial_selected_idx = findfirst(==(first(menu_options)), twisted_annotation_text[])
     if isnothing(initial_selected_idx)
         @error "Could not locate first menu option in twisted_annotation_text" first(menu_options)
@@ -223,6 +238,7 @@ function fix_annotation_ap_axis(
 
     twisted_seam_cell_text = Observable(String.([tmodel.names[2:2:end]; tmodel.names[1:2:end]]))
 
+
     twisted_mesh_plot = mesh!(
         ax_twisted,
         twisted_mesh;
@@ -232,17 +248,30 @@ function fix_annotation_ap_axis(
         alpha = 0.5,
         inspectable = false
     )
-    connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    #connect!(twisted_mesh_plot.visible, contour_mesh_toggle.active)
+    twisted_mesh_plot.visible = false
+    on(contour_mesh_toggle.active) do v
+        twisted_mesh_plot.visible = v
+    end
     lines!(ax_twisted, twisted_central_spline)
     scatter!(ax_twisted, twisted_central_pts)
     cs_lines = lines!(ax_twisted, twisted_central_line_match)
-    connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    #connect!(cs_lines.visible, central_spline_lines_toggle.active)
+    cs_lines.visible = false
+    on(central_spline_lines_toggle.active) do v
+        cs_lines.visible = v
+    end
     meshscatter!(ax_twisted, twisted_seam_cells; markersize = 1.0, color = :gray, alpha = 0.5, transparency = true)
     ms_annotation_cells = meshscatter!(ax_twisted, twisted_annotation_cells; markersize = 1.0, color = use_myuntwist ? :gold : :blue, alpha = 0.5, transparency = true)
     text!(ax_twisted, twisted_seam_cell_labels; text = twisted_seam_cell_text, align = (:right, :bottom))
     ann_txt = text!(ax_twisted, twisted_annotation_cells; text = twisted_annotation_text, align = (:right, :bottom))
-    connect!(ann_txt.visible, annotation_text_toggle.active)
+    #connect!(ann_txt.visible, annotation_text_toggle.active)
+    ann_txt.visible = false
+    on(annotation_text_toggle.active) do v
+        ann_txt.visible = v
+    end
     @info "twisted_seam_cell_labels" twisted_seam_cell_labels[] tmodel.names
+
 
     distances = Observable(Float64[])
     selected_distance = Observable(0.0)
@@ -254,21 +283,26 @@ function fix_annotation_ap_axis(
     Npts = length(tmodel)
     z = LinRange(0, 1, Npts)
     max_distance = Observable(Float64[])
-    lines!(ax_distance, central_spline_arc_lengths, distances)
+    distances_lines = lines!(ax_distance, central_spline_arc_lengths[], distances[])
     hlines!(ax_distance, selected_distance)
-    lines!(ax_distance, central_spline_arc_lengths, max_distance)
-    scatter!(ax_distance, central_spline_arc_lengths, distances, color = distances, colormap = Reverse(:viridis))
-    scatter!(ax_twisted, distance_central_pts, color = distances, colormap = Reverse(:viridis))
+    max_distance_lines = lines!(ax_distance, central_spline_arc_lengths[], max_distance)
+    distances_scatter = scatter!(ax_distance, central_spline_arc_lengths[], distances[], color = distances[], colormap = Reverse(:viridis))
+    distance_central_pts_scatter = scatter!(ax_twisted, distance_central_pts, color = distances[], colormap = Reverse(:viridis))
     selected_twisted_annotation_cell = Observable([twisted_annotation_cells[][selected_annotation_idx[]]])
     meshscatter!(ax_twisted, selected_twisted_annotation_cell, color = :red, markersize=1.1)
 
+
+    #=
     ratio = @lift try
         $distances ./ $max_distance
     catch err
         ones(size($max_distance))
     end
-    lines!(ax_ratio, central_spline_arc_lengths, ratio)
-    hlines!(ax_ratio, 1.0, linestyle = :dash)
+    =#
+    ratio = Observable(distances[])
+    ratio_lines = lines!(ax_ratio, central_spline_arc_lengths[], ratio)
+    # hlines!(ax_ratio, 1.0, linestyle = :dash)
+    hlines!(ax_ratio, 1.0, linestyle = :solid)
 
     nt_obs = Observable(0.0) 
 
@@ -339,12 +373,16 @@ function fix_annotation_ap_axis(
             nt_obs[] = nt
         end
         selected_z_position[] = z_positions[][value-first(cell_key_range)+1]
+        if !isnothing(annotation_timepoint_listener)
+            annotation_timepoint_listener(annotation_menu.selection[],value)
+        end
         @info "Timepoint slider" value
     end
 
     on(throttle(0.1, expansion_factor_slider.value)) do expansion_factor_value
         # TODO compute value from timepoint slider
-        value = time_normalized_slider.value[]
+        # value = time_normalized_slider.value[]
+        value = nt_obs[]
         tmodel = mts_nt(value)
         annotation_positions = twisted_annotation_positions(value)
         if !ismissing(tmodel)
@@ -365,6 +403,7 @@ function fix_annotation_ap_axis(
 
 
     function plot_distance(idx)
+        println("plot_distance")
         selected_annotation_idx[] = idx
         #println(idx)
         try
@@ -376,19 +415,32 @@ function fix_annotation_ap_axis(
         Npts = length(tmodel)
         z = LinRange(0, 1, Npts)
         central_pts = swapyz_scale.(cs.(z))
-        central_spline_arc_lengths.val = [0; cumsum(norm.(diff(central_pts)))]
-        distance_central_pts[] = central_pts
+        # central_spline_arc_lengths.val = [0; cumsum(norm.(diff(central_pts)))]
+        _central_spline_arc_lengths = [0; cumsum(norm.(diff(central_pts)))]
+        central_spline_arc_lengths[] = _central_spline_arc_lengths
+        # distance_central_pts[] = central_pts
 
         max_r = ShroffCelegansModels.max_radius_function(tmodel)
         expansion_factor_value = expansion_factor_slider.value[]
-        max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        _max_distance = max_r.(z) .* voxel_size .* expansion_factor_value
+        # max_distance[] = max_r.(z) .* voxel_size .* expansion_factor_value
+        Makie.update!(max_distance_lines, arg1 = _central_spline_arc_lengths, arg2 = _max_distance)
 
         pt = twisted_annotation_cells[][idx]
-        distances[] = norm.(central_pts .- pt)
+        _distances = norm.(central_pts .- pt)
+        distances[] = _distances
+        #distances[] = norm.(central_pts .- pt)
+        Makie.update!(distances_lines, arg1 = _central_spline_arc_lengths, arg2 = _distances)
+        Makie.update!(distances_scatter, arg1 = _central_spline_arc_lengths, arg2 = _distances, color = _distances)
+        Makie.update!(distance_central_pts_scatter, arg1 = central_pts, color = _distances)
+
+        _ratio = _distances ./ _max_distance
+        Makie.update!(ratio_lines, arg1 = _central_spline_arc_lengths, arg2 = _ratio)
+
         #autolimits!(ax_distance)
         #ylims!(ax_distance, nothing)
-        limits!(ax_distance, (0, 200), (0, maximum(distances[])))
-        limits!(ax_ratio, (0, 200), (0, maximum(ratio[])))
+        limits!(ax_distance, (0, 200), (0, maximum(_distances)))
+        limits!(ax_ratio, (0, 200), (0, maximum(_ratio)))
         selected_distance[] = norm(twisted_central_pts[][idx] - pt)
 
         selected_annotation_name[] = twisted_annotation_text[][idx]
@@ -414,20 +466,21 @@ function fix_annotation_ap_axis(
     original_z_positions = let idx=1
         Observable((x->x[idx][2]).(original_annotation_positions_over_time))
     end
-    lines!(ax_z, cell_key_range, original_z_positions; color = :gray, linestyle = :dash, label = "Original Z positions")
+    lines!(ax_z, cell_key_range, original_z_positions; color = :gray, linestyle = :solid, label = "Original Z positions")
+
     z_lines = lines!(ax_z, cell_key_range, z_positions)
     vlines!(ax_z, timepoint_slider.value, color = :red)
     DataInspector(ax_z)
 
     selected_z_position = Observable(z_positions[][timepoint_slider.value[]-first(cell_key_range)+1])
-    vlines!(ax_distance, selected_z_position; color = :red, linestyle = :dash)
-    vlines!(ax_ratio, selected_z_position; color = :red, linestyle = :dash)
+    vlines!(ax_distance, selected_z_position; color = :red, linestyle = :solid)
+    vlines!(ax_ratio, selected_z_position; color = :red, linestyle = :solid)
 
     #common_annotations_text = collect(keys(annotation_dict))
     common_annotations_text = _annotation_text
     @info common_annotations_text
 
-    h5open("annotation_changes.h5", "r", swmr=true) do h5f
+    h5open(annotation_changes_path(), "r", swmr=true) do h5f
         for time_idx in eachindex(cell_key_range)
             timepoint = cell_key_range[time_idx]
             for annotation_name in values(dataset.cell_key.mapping)
@@ -435,13 +488,17 @@ function fix_annotation_ap_axis(
                 group_name = annotation_change_group_name(dataset.path, timepoint, annotation_name)
                 if haskey(h5f, group_name)
                     @info "Loading annotation changes from annotations_changes.h5" group_name annotation_idx annotation_name
-                    new_position = h5f[group_name]["new_position"][:,end]
-                    straight_annotation_positions_over_time[time_idx][annotation_idx] = Point3f(
-                        new_position[1],
-                        new_position[2],
-                        new_position[3]
-                    )
-                    @info "Loaded" new_position
+                    try
+                        new_position = h5f[group_name]["new_position"][:,end]
+                        straight_annotation_positions_over_time[time_idx][annotation_idx] = Point3f(
+                            new_position[1],
+                            new_position[2],
+                            new_position[3]
+                        )
+                        @info "Loaded" new_position
+                    catch err
+                        println(err)
+                    end
                 end
             end
         end
@@ -463,6 +520,9 @@ function fix_annotation_ap_axis(
                 ylims!(ax_z)
             catch err
                 @error "Could not get z_positions" err
+            end
+            if !isnothing(annotation_timepoint_listener)
+                annotation_timepoint_listener(selected, timepoint_slider.value[])
             end
         end
     end
@@ -567,13 +627,15 @@ function fix_annotation_ap_axis(
     end
 
     notify(annotation_menu.selection)
+
+    if !isnothing(initial_timepoint) && initial_timepoint != 0.0
+        set_close_to!(timepoint_slider, initial_timepoint)
+    end
+
     f
 end
 
-using Sockets
-using HDF5
-
-@kwdef struct AnnotationChange
+struct AnnotationChange
     ip_address::UInt64
     dataset_path::String
     annotation_name::String
@@ -587,26 +649,13 @@ function AnnotationChange(;
     annotation_name::String,
     timepoint::Int,
     original_position::Point,
-    new_z_position::Float64
+    new_position::Union{Point, Nothing} = nothing,
+    new_z_position::Union{Float64, Nothing} = nothing,
 )
-    return AnnotationChange(
-        ip_address,
-        dataset_path,
-        annotation_name,
-        timepoint,
-        original_position,
-        Point3d(original_position[1], new_z_position, original_position[3])
-    )
-end
-function AnnotationChange(
-    ip_address::UInt64,
-    dataset_path::String,
-    annotation_name::String,
-    timepoint::Int,
-    original_position::Point,
-    new_z_position::Float64
-)
-    new_position = Point3d(original_position[1], new_z_position, original_position[3])
+    isnothing(new_position) && isnothing(new_z_position) && throw(ArgumentError("One of new_position or new_z_position must be provided"))
+    if isnothing(new_position)
+        new_position = Point3d(original_position[1], new_z_position, original_position[3])
+    end
     return AnnotationChange(
         ip_address,
         dataset_path,
@@ -653,7 +702,7 @@ function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVE
                         c.annotation_name
                     )
                     @info "Group name for HDF5: $group_name"
-                    h5open("annotation_changes.h5", "cw", swmr=true) do h5f
+                    h5open(annotation_changes_path(), "cw", swmr=true) do h5f
                         if !haskey(h5f, group_name)
                             create_group(h5f, group_name)
                         end
@@ -732,7 +781,7 @@ function shutdown_server()
     close(s)
 end
 
-function load_annotation_changes_cache(filepath = joinpath(@__DIR__, "..", "..", "annotation_changes.h5"))
+function load_annotation_changes_cache(filepath = annotation_changes_path())
     # changes = Dict{String,Pair{Vector{Point3{Float64}},Vector{Point3{Float64}}}}()
     changes = Dict{String,Pair{Point3{Float64},Point3{Float64}}}()
 
@@ -818,40 +867,64 @@ Returns
 """
 function update_annotations_cache(
     annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
-    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}}
+    annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}};
+    dry_run::Bool = false
 )
     annotations_cache_keys = keys(annotations_cache)
     key_map_dict = Dict(first.(annotations_cache_keys) .=> annotations_cache_keys)
     for (change_key, (old_pt, new_pt)) in annotations_changes
-        change_key_parts = splitpath(change_key)
+        change_key_parts = split(change_key, "\\")
         timepoint = tryparse(Int, change_key_parts[end-3])
         if isnothing(timepoint)
             # Case when annotation name does not contain a slash
             timepoint = parse(Int, change_key_parts[end-2])
-            dataset_path = joinpath(change_key_parts[begin:end-3])
+            dataset_path = join(change_key_parts[begin:end-3], "\\")
             annotation_name = change_key_parts[end-1]
         else
             # Case when annotation name contains a slash
             # timepoint is change_key_parts[end-3]
-            dataset_path = joinpath(change_key_parts[begin:end-4])
+            dataset_path = join(change_key_parts[begin:end-4], "\\")
             annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
         end
         # Could error if dataset_path is not in key_map_dict
+        if !haskey(key_map_dict, dataset_path)
+            @warn "Dataset path $dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
+            continue
+        end
         annotations_cache_key = key_map_dict[dataset_path]
-        dataset = ShroffCelegansModels.Dataset(dataset_path)
+        local_dataset_path = dataset_path
+        if Sys.isunix()
+            local_dataset_path = replace(local_dataset_path, raw"X:\\" => "/nearline/shroff/")
+            local_dataset_path = replace(local_dataset_path, "\\" => "/")
+        end
+        dataset = ShroffCelegansModels.Dataset(local_dataset_path)
         annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
+        if isnothing(annotation_symbol)
+            @warn "Annotation $annotation_name not found in dataset $local_dataset_path, skipping change at timepoint $timepoint"
+            continue
+        end
         # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
         timepoint = timepoint - dataset.cell_key.start + 1
         if ismissing(annotations_cache[annotations_cache_key][timepoint])
             @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
-            annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
-            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(old_pt)
+            if !dry_run
+                annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
+                annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+            end
         end
         # Check old_pt matches the cached point
-        if annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] != swapyz_unscale(old_pt)
-            @warn "Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt))"
+        try
+            if !isapprox(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
+                _norm = norm(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
+                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
+                This may indicate the cache is out of sync with the changes, or the change does not apply cleanly to the current cache state. Consider reviewing this change and the current cache state to ensure consistency."""
+            end
+        catch e
+            @warn "Error checking annotation point for $annotations_cache_key at timepoint $timepoint with annotation $annotation_symbol: $e"
         end
-        annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+        if !dry_run
+            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+        end
     end
     return annotations_cache
 end

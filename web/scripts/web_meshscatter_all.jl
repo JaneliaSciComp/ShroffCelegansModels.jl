@@ -8,8 +8,8 @@ function meshscatter_all_webapp()
     app = App(; title="Shroff Lab: C. elegans meshscatter_all") do
         return with_theme(meshscatter_all, theme_black())
     end
-    server = Server(app, "shroff-data.int.janelia.org", 8082;
-        proxy_url="https://shroff-data.int.janelia.org/meshscatter_all/"
+    server = Server(app, "0.0.0.0", 8082;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/meshscatter_all/"
     )
     return server
 end

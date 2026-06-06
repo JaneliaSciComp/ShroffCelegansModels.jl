@@ -3,12 +3,24 @@ using GeometryBasics
 using ProgressMeter
 using CSV
 using DataFrames
+using HDF5
 
-include("get_group_annotation_positions_over_time.jl")
+# include("get_group_annotation_positions_over_time.jl")
+using ShroffCelegansModels: CelegansModel, get_datasets_info, get_group_annotation_positions_over_time, annotation_positions
 
-function average_annotations(datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset})
-    cache = my_annotation_position_cache
-    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache)
+function average_annotations(
+    datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};
+    cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
+    timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
+    avg_models::Vector{<: CelegansModel} = avg_models,
+    use_cell_key_annotations_only = true
+)
+    if isa(timepoints, Integer)
+        N_timepoints = timepoints
+        timepoints = LinRange(0, 1, N_timepoints)
+    end
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache, timepoints; avg_models = avg_models)
+    group_annotation_positions_over_time::Vector{Vector{Dict{String, Point3{Float64}}}}
     #common_annotations = intersect(map(datasets_info) do dataset_info
     #    collect(keys(dataset_info.annotation_dict))
     #end...)
@@ -16,23 +28,33 @@ function average_annotations(datasets::Vector{ShroffCelegansModels.Datasets.Norm
 
     # common_annotations
     annotations = intersect(map(datasets_info) do dataset_info
-        collect(keys(dataset_info.annotation_dict))
-    end...)
+        dataset_annotations = collect(keys(dataset_info.annotation_dict))
+        if use_cell_key_annotations_only
+            dataset_annotations = filter(name -> name ∈ values(dataset_info.dataset.cell_key.mapping), dataset_annotations)
+        end
+        dataset_annotations
+    end...)::Vector{String}
 
     positions = map(eachindex(first(group_annotation_positions_over_time))) do j
         map(annotations) do name
             mean(map(eachindex(group_annotation_positions_over_time)) do i
                 group_annotation_positions_over_time[i][j][name]
             end)
-        end
-    end
+        end::Vector{Point3{Float64}}
+    end::Vector{Vector{Point3{Float64}}}
     return (; annotations, positions)
 end
 
 # average_annotations_dict = average_annotations(datasets)
-function average_annotations(datasets::Dict{String, Vector{ShroffCelegansModels.Datasets.NormalizedDataset}})
+function average_annotations(
+    datasets::Dict{String, Vector{ShroffCelegansModels.Datasets.NormalizedDataset}};
+    cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
+    timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
+    avg_models::Vector{<: CelegansModel} = avg_models,
+    use_cell_key_annotations_only = true
+)
     average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k    
-           average_annotations(datasets[k])
+           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only)
     end)
     return average_annotations_dict
 end
