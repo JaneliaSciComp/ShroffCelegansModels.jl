@@ -3,11 +3,9 @@ using Bonito
 using ShroffCelegansModels
 using Sockets
 
-#push!(LOAD_PATH, "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl")
-push!(LOAD_PATH, dirname(dirname(pathof(ShroffCelegansModels))))
-include("../../src/demo_averaging/save_cache.jl")
-include("../../src/demo_averaging/average_annotations.jl")
 include("../../scripts/meshscatter_average_dev.jl")
+
+using ShroffCelegansModels: load_annotation_cache
 
 function black_body(fig)
     DOM.body(fig, style=Styles(CSS("background-color" => "black")))
