@@ -3,6 +3,8 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 using ShroffCelegansModels: swapyz_scale
+using ShroffCelegansModels.CSV
+using ShroffCelegansModels.DataFrames: DataFrame, eachrow
 
 include("crop_video.jl")
 
