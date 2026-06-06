@@ -42,6 +42,10 @@ spec:
               mountPath: /var/www/recompute
               subPath: recompute
               readOnly: true
+            - name: annotations
+              mountPath: /var/www/csv_archives
+              subPath: csv_archives
+              readOnly: true
           resources:
             requests:
               cpu: 100m
