@@ -1,0 +1,30 @@
+/* Shroff-specific overrides on top of pico.css.
+ * pico.css supplies all base typography, spacing, and details/summary
+ * styling. Anything in this file is a deliberate deviation.
+ */
+
+/* Highlight rows whose value equals the global max (used in
+ * /modified_times/ and similar listings). pico.css doesn't ship a
+ * built-in "spotlight" style so we keep our own. */
+.shroff-highlight {
+    background: #fffbcc;
+    font-weight: bold;
+}
+
+/* Tighten the nested <ul> stacks in the modified-times tree so deep
+ * nesting doesn't push content too far right. */
+.shroff-mtime ul {
+    margin-left: 0;
+    padding-left: 1.25rem;
+}
+
+.shroff-mtime details > summary {
+    cursor: pointer;
+}
+
+/* Slightly separate the per-kind sections (Annotation, Lattice). */
+.shroff-mtime section + section {
+    margin-top: 1.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--pico-muted-border-color, #ddd);
+}

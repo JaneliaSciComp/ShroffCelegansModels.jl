@@ -2,6 +2,8 @@ using Bonito
 using HDF5: h5open, attrs
 using Dates: unix2datetime, format as date_format
 
+include("web_theme.jl")
+
 const PORT = 9400
 
 modified_times_path() = joinpath(
@@ -74,11 +76,12 @@ function argmax_finite(xs::Vector{Float64})
     return findall(x -> !isnan(x) && x == m, xs)
 end
 
-const HIGHLIGHT_STYLE = "background:#fffbcc;font-weight:bold"
+const HIGHLIGHT_CLASS = "shroff-highlight"
 
 function render_kinds(kinds::Dict{String, Dict{String, Vector{DatasetEntry}}}, source_mtime::Float64)
     sorted_kinds = sort(collect(keys(kinds)))
-    DOM.div(
+    DOM.main(
+        theme_assets()...,
         DOM.h2("Modified times"),
         DOM.p(
             "Source: ", DOM.code(modified_times_path()),
@@ -90,6 +93,7 @@ function render_kinds(kinds::Dict{String, Dict{String, Vector{DatasetEntry}}}, s
                 render_kind(kinds[kind]),
             )
         end...,
+        ; class="shroff-mtime container",
     )
 end
 
@@ -106,23 +110,23 @@ function render_kind(groups::Dict{String, Vector{DatasetEntry}})
         group_max = group_maxes[group_name]
         hot_datasets = Set(findall(==(group_max), ds_maxes))
         group_last = group_max == -Inf ? "n/a" : format_unix(group_max)
-        group_summary_style = group_max == global_max ? HIGHLIGHT_STYLE : ""
+        group_class = group_max == global_max ? HIGHLIGHT_CLASS : ""
         DOM.details(
             DOM.summary(
                 DOM.strong(group_name),
                 " — ", string(length(datasets)), " datasets",
                 " — last modified: ", group_last,
-                ; style=group_summary_style,
+                ; class=group_class,
             ),
             DOM.ul(map(enumerate(datasets)) do (ds_i, d)
                 hot_tps = Set(argmax_finite(d.mtimes))
-                dataset_summary_style = ds_i in hot_datasets ? HIGHLIGHT_STYLE : ""
+                dataset_class = ds_i in hot_datasets ? HIGHLIGHT_CLASS : ""
                 DOM.li(DOM.details(
                     DOM.summary(
                         "[", string(d.index), "] ",
                         DOM.code(d.cell_key_name),
                         " — last modified: ", last_modified(d.mtimes),
-                        ; style=dataset_summary_style,
+                        ; class=dataset_class,
                     ),
                     DOM.div("path: ", DOM.code(d.path)),
                     DOM.div(
@@ -137,8 +141,8 @@ function render_kind(groups::Dict{String, Vector{DatasetEntry}})
                         else
                             format_unix(u)
                         end
-                        tp_style = i in hot_tps ? HIGHLIGHT_STYLE : ""
-                        DOM.li("t=", string(tp), ": ", label; style=tp_style)
+                        tp_class = i in hot_tps ? HIGHLIGHT_CLASS : ""
+                        DOM.li("t=", string(tp), ": ", label; class=tp_class)
                     end),
                 ))
             end),
