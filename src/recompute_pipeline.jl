@@ -88,6 +88,19 @@ function run_recompute_pipeline(;
     @info "Pipeline threading" julia_nthreads=Threads.nthreads() blas_nthreads=BLAS.get_num_threads()
     @info "Pipeline starting" config_path output_dir checkpoint_dir n_timepoints kinds
 
+    # 0. Archive any previous run's outputs at the top level into a
+    #    timestamped subdir so this run starts with a clean directory.
+    #    Top-level always reflects "latest"; consumers (`_latest_cache_path`,
+    #    `load_latest_average_annotations`) don't need to know about the archive.
+    _phase("0/8 archive_previous") do
+        archived = _archive_previous_outputs!(output_dir)
+        if archived === nothing
+            @info "Nothing to archive" output_dir
+        else
+            @info "Archived previous outputs" archive=archived
+        end
+    end
+
     # 1. Load datasets.
     datasets, flattened = _phase("1/8 load_datasets") do
         @info "[1/8] Loading datasets" config_path
@@ -247,6 +260,64 @@ function run_recompute_pipeline(;
 
     @info "Pipeline complete" h5_path csv_path n_changes n_timepoints phase_timings
     return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
+end
+
+# Sweep the top level of `output_dir` into a timestamped `archive_<ts>/`
+# subdir, where `<ts>` is the newest run-timestamp embedded in any existing
+# output filename (yyyy_mm_dd_HHMMSS). Returns the archive dir path on
+# success, or `nothing` if there was nothing to archive (e.g. first run on
+# a fresh directory, or only non-timestamped/transient files present).
+#
+# Skipped (left in place):
+#   - subdirectories (already-archived, `checkpoint/`, etc.)
+#   - in-progress `.tmp.*` writes
+#
+# If no timestamped artifact exists at top level but non-timestamped files do
+# (e.g. only `annotations_cache.h5` from a partial run), nothing is moved —
+# we don't fabricate a timestamp for an unknown vintage.
+function _archive_previous_outputs!(output_dir::AbstractString)
+    isdir(output_dir) || return nothing
+
+    ts_re = r"(\d{4}_\d{2}_\d{2}_\d{6})"
+    latest_ts = ""
+    candidates = String[]
+    for f in readdir(output_dir)
+        full = joinpath(output_dir, f)
+        isdir(full) && continue                      # skip checkpoint/, archive_*/, ...
+        occursin(".tmp.", f) && continue             # skip in-progress writes
+        push!(candidates, f)
+        m = match(ts_re, f)
+        if m !== nothing && m.captures[1] > latest_ts
+            latest_ts = m.captures[1]
+        end
+    end
+
+    isempty(candidates) && return nothing
+    if isempty(latest_ts)
+        @info "No timestamped artifacts found at top level; leaving non-timestamped files in place" candidates
+        return nothing
+    end
+
+    archive_dir = joinpath(output_dir, "archive_" * latest_ts)
+    if isdir(archive_dir)
+        @warn "Archive dir already exists; skipping move to avoid overwrite" archive_dir
+        return nothing
+    end
+
+    mkpath(archive_dir)
+    n_moved = 0
+    for f in candidates
+        src = joinpath(output_dir, f)
+        dst = joinpath(archive_dir, f)
+        try
+            mv(src, dst)
+            n_moved += 1
+        catch err
+            @warn "Failed to archive file" src dst err
+        end
+    end
+    @info "Archive populated" archive_dir n_moved of=length(candidates)
+    return archive_dir
 end
 
 # Atomic write: invoke `body(tmp_path)` to produce the file, then mv it into
