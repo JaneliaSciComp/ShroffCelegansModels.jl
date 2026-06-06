@@ -205,12 +205,20 @@ function save_annotation_position_cache(
     end
 end
 
-function save_annotation_position_cache_all_dated(datasets::Dict{String, Vector{Datasets.NormalizedDataset}}; clear = true)
+function save_annotation_position_cache_all_dated(
+    datasets::Dict{String, Vector{Datasets.NormalizedDataset}};
+    clear = true,
+    output_dir::AbstractString = "",
+)
     # Clear caches
     if clear
         empty!(annotation_position_cache)
         empty!(my_annotation_position_cache)
         empty!(annotations_cache)
+    end
+
+    if !isempty(output_dir)
+        mkpath(output_dir)
     end
 
     date_str = "$(Dates.today())"
@@ -223,6 +231,9 @@ function save_annotation_position_cache_all_dated(datasets::Dict{String, Vector{
             tp_str *= "_expanded"
         end
         cache_file = "embryos_$(tp_str)_$date_str.h5"
+        if !isempty(output_dir)
+            cache_file = joinpath(output_dir, cache_file)
+        end
         save_annotation_position_cache(
             cache_file,
             datasets,

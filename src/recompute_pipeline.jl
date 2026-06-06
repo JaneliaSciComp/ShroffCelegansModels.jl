@@ -148,6 +148,23 @@ function run_recompute_pipeline(;
         end
     end
 
+    # 4b. Dated embryo position-cache snapshots (`embryos_*_<date>.h5`,
+    #     4 variants: raw/371 × expanded/not). Runs against the
+    #     freshly-updated annotations_cache; `clear=false` preserves it.
+    #     Failures are non-fatal — the main pipeline outputs still produce.
+    _phase("4b/8 save_embryos_dated") do
+        @info "[4b/8] Saving dated embryo position cache files" output_dir
+        try
+            ShroffCelegansModels.save_annotation_position_cache_all_dated(
+                datasets;
+                clear = false,
+                output_dir = output_dir,
+            )
+        catch err
+            @warn "save_annotation_position_cache_all_dated failed (continuing)" err
+        end
+    end
+
     # 5. Average lattice models.
     avg_models = _phase("5/8 get_avg_models") do
         @info "[5/8] Computing average lattice models" n_timepoints
