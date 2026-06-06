@@ -1,10 +1,7 @@
-#const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_full.json"
-if gethostname() == "KITTISOPIKULM-2"
-    const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
-else
-    const config_path = joinpath(@__DIR__, "..", "..", "config", "linux", "config_2026_03_19_v2.json")
-end
-const voxel_size = 0.1625 # um
+# `config_path` and `voxel_size` are now `const` in the ShroffCelegansModels
+# module itself (src/ShroffCelegansModels.jl); they're imported into Main
+# by the launch script via `using ShroffCelegansModels: config_path, voxel_size`,
+# so no duplicate definition here.
 
 using LinearAlgebra
 using ShroffCelegansModels.JSON3
@@ -34,7 +31,9 @@ end
 models_at_nt(nt) = map(smts_datasets_nt) do ds
     ds(nt)
 end
-include("../save_celegans_avg_models.jl")
+# `save_celegans_avg_models.jl` is included by the package itself
+# (src/ShroffCelegansModels.jl), so its functions (`load_avg_models`,
+# `get_avg_models`) come in via the launch script's `using`.
 
 recalculate_avg_models = false
 
@@ -46,7 +45,8 @@ else
     avg_models = load_avg_models("celegans_avg_models_2024_07_26.h5")
 end
 
-using ShroffCelegansModels: annotations_cache, annotation_position_cache, my_annotation_position_cache
+# annotations_cache / my_annotation_position_cache / annotation_position_cache
+# are imported into Main by the launch script.
 
     int_ds = filter(flattened_datasets) do ds
         "int1dr" in values(ds.cell_key.mapping)

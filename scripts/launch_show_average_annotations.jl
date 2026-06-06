@@ -9,20 +9,39 @@ using ShroffCelegansModels.HDF5
 using ShroffCelegansModels.ThinPlateSplines # tps_solve
 using InteractiveUtils
 
+# The package now owns these symbols (via src/ShroffCelegansModels.jl and
+# its transitive includes through parse_worm_dataset_path.jl). The
+# include() lines previously used to pull them into Main are gone — we
+# import what the still-Main-included files (modelio.jl, loading.jl,
+# show_average_annotations.jl, debug_annotation_ap_axis.jl) and this
+# launch script's own body actually reference.
+using ShroffCelegansModels:
+    config_path,
+    voxel_size,
+    read_config_json,
+    seam_cell_pts,
+    transform_annotations,
+    load_straightened_annotations_over_time,
+    get_cell_trajectory_dict,
+    fix_annotation_ap_axis,
+    update_annotations_cache,
+    load_annotation_changes_cache,
+    annotations_cache,
+    my_annotation_position_cache,
+    annotation_position_cache,
+    load_avg_models,
+    save_annotation_cache,
+    load_annotation_cache,
+    save_annotations_cache,
+    load_annotations_cache
+
 @info "Loading demo_averaging.jl..."
-@time_imports include("../src/demo_averaging/read_config_json.jl")
 @time_imports include("../src/demo_averaging/modelio.jl")
-# @time_imports include("../src/demo_averaging.jl")
 @info "Loading data..."
 @time_imports include("../src/demo_averaging/loading.jl")
 @info "Loading show_average_annotations.jl..."
-@time_imports include("../src/demo_averaging/seam_cell_pts.jl")
-@time_imports include("../src/demo_averaging/transform_annotations.jl")
-@time_imports include("../src/demo_averaging/load_straightened_annotations_over_time.jl")
-@time_imports include("../src/demo_averaging/get_cell_trajectory_dict.jl")
 @time_imports include("../src/demo_averaging/show_average_annotations.jl")
 @time_imports include("../src/demo_averaging/debug_annotation_ap_axis.jl")
-@time_imports include("../src/demo_averaging/fix_annotation_ap_axis.jl")
 
 function alias_cache(drive_letter)
     if drive_letter == "X"
