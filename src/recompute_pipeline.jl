@@ -15,8 +15,9 @@ Orchestrates the user's 6-step workflow:
   6. Compute edited averaged annotations via `average_annotations(...)`, then
      smooth via `smooth_average_annotations(...)`.
   7. Write the smoothed averages to a timestamped HDF5 file.
-  8. Export the post-twitch DataFrame (and pre-twitch if the source CSV is
-     available) to CSV.
+  8. Build an intermediate `_for_ben.csv`, then write the explicit-schema
+     deliverables (`pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`,
+     `combined_<ts>.csv`) and delete the intermediates.
 
 The function takes no required arguments — it reads its configuration from env
 vars / package defaults — so an LSF wrapper could invoke it identically once
@@ -24,8 +25,6 @@ vars / package defaults — so an LSF wrapper could invoke it identically once
 """
 
 using Dates: Dates, now, format
-using DataFrames: DataFrame
-using CSV: CSV
 using Printf: @sprintf
 using LinearAlgebra: BLAS
 using HDF5: h5open, attrs, read_attribute, create_group
@@ -49,8 +48,6 @@ Keyword arguments (all with sensible defaults):
   - `config_path` — path to the datasets config JSON
   - `output_dir` — where to write artifacts (HDF5 + CSV). Created if absent.
   - `annotation_changes_path` — input edits HDF5. Skip step 3/4 if missing.
-  - `pretwitch_csv_path` — optional pre-twitch coordinates CSV. If absent the
-    DataFrame export contains post-twitch data only.
   - `n_timepoints` — `LinRange(0, 1, n_timepoints)` for averaging. Default 371.
   - `kinds` — sorted-unique kinds reported in the trigger marker. Currently
     informational; future versions may use it to skip get_avg_models when only
@@ -63,7 +60,6 @@ function run_recompute_pipeline(;
     config_path::AbstractString = ShroffCelegansModels.config_path,
     output_dir::AbstractString = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute"),
     annotation_changes_path::AbstractString = get(ENV, "ANNOTATION_CHANGES_PATH", "/data/annotations/annotation_changes.h5"),
-    pretwitch_csv_path::AbstractString = get(ENV, "PRETWITCH_CSV_PATH", ""),
     n_timepoints::Int = 371,
     kinds::Vector{String} = ["annotation", "lattice"],
     smooth_factor_r::Float64 = _DEFAULT_SMOOTH_R,
@@ -239,39 +235,50 @@ function run_recompute_pipeline(;
         ShroffCelegansModels.save_average_annotations(smoothed; filename = h5_path)
     end
 
-    # 8. Export DataFrame.
-    csv_path = joinpath(output_dir, "post_pretwitch_export_$(ts).csv")
-    _phase("8/8 export_csv") do
-        posttwitch_only = isempty(pretwitch_csv_path) || !isfile(pretwitch_csv_path)
-        @info "[8/8] Exporting DataFrame" csv_path pretwitch_csv_path posttwitch_only
-        _export_post_pretwitch_csv(
-            h5_path, csv_path;
-            pretwitch_csv_path = posttwitch_only ? nothing : pretwitch_csv_path,
-            avg_models = avg_models,
-        )
+    # 8. Build the intermediate post-twitch `_for_ben.csv`. This is NOT a
+    #    deliverable — it's the input the explicit exports in 8a consume.
+    #    It (and resave_for_ben's `_ryan_*` side files) are removed right after
+    #    8a has produced the explicit CSVs.
+    ben_csv = replace(h5_path, ".h5" => "_for_ben.csv")
+    _phase("8/8 resave_for_ben") do
+        @info "[8/8] Building intermediate _for_ben CSV (consumed by explicit export)" ben_csv
+        ShroffCelegansModels.resave_for_ben(h5_path; target_filename = ben_csv, time_range = (381, 751))
     end
 
-    # 8c. Combined pretwitch + posttwitch explicit-schema CSVs. Uses the
-    #     `_for_ben.csv` produced by `resave_for_ben` (called from phase 8)
-    #     plus the ryan_data pretwitch coords + naming-correlations table
-    #     baked into the repo. Positional model cell names are translated
-    #     to embryonic lineage names.
-    ben_csv = replace(h5_path, ".h5" => "_for_ben.csv")
-    _phase("8a/8 export_combined") do
+    # 8a. Explicit-schema CSVs — the deliverables: `pretwitch_<ts>.csv`,
+    #     `posttwitch_<ts>.csv`, `combined_<ts>.csv`. Built from the
+    #     `_for_ben.csv` above plus the ryan_data pretwitch coords +
+    #     naming-correlations table baked into the repo. Positional model cell
+    #     names are translated to embryonic lineage names.
+    explicit_paths = _phase("8a/8 export_explicit") do
         if isfile(ben_csv)
             try
-                ShroffCelegansModels.write_combined_explicit_csvs(;
+                res = ShroffCelegansModels.write_combined_explicit_csvs(;
                     output_dir = output_dir,
                     avg_models = avg_models,
                     ben_csv_path = ben_csv,
                     date_str = ts,
                 )
-                @info "[8c/8] Wrote combined pretwitch+posttwitch CSVs"
+                @info "[8a/8] Wrote explicit pretwitch/posttwitch/combined CSVs" res.pretwitch_path res.posttwitch_path res.combined_path
+                return (; res.pretwitch_path, res.posttwitch_path, res.combined_path)
             catch err
-                @warn "Combined explicit-CSV export failed (pipeline outputs still valid)" err
+                @warn "Explicit-CSV export failed (pipeline outputs still valid)" err
+                return nothing
             end
         else
-            @warn "Skipping 8c — _for_ben.csv not found" ben_csv
+            @warn "Skipping 8a — _for_ben.csv not found" ben_csv
+            return nothing
+        end
+    end
+
+    # 8a-cleanup. Remove the non-deliverable intermediates so only the explicit
+    #     CSVs remain: the `_for_ben.csv` input plus resave_for_ben's `_ryan_*`
+    #     side outputs.
+    _phase("8a-clean/8 rm_intermediates") do
+        for f in (ben_csv,
+                  replace(ben_csv, ".csv" => "_ryan_duplicates.csv"),
+                  replace(ben_csv, ".csv" => "_ryan_stats.csv"))
+            isfile(f) && rm(f; force=true)
         end
     end
 
@@ -316,14 +323,14 @@ function run_recompute_pipeline(;
         @warn "Could not remove checkpoint dir after success" checkpoint_dir err
     end
 
-    @info "Pipeline complete" h5_path csv_path n_changes n_timepoints phase_timings
-    return (; h5_path, csv_path, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
+    @info "Pipeline complete" h5_path explicit_paths n_changes n_timepoints phase_timings
+    return (; h5_path, explicit_paths, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
 end
 
 # Sweep dated top-level outputs into `archive_<ts>/`, where `<ts>` is the
 # newest run-timestamp embedded in any existing filename. Used for
-# per-run products (edited_smoothed_*_<ts>.h5, post_pretwitch_export_*.csv,
-# embryos_*_<date>.h5, etc.).
+# per-run products (edited_smoothed_*_<ts>.h5, pretwitch_*/posttwitch_*/
+# combined_*_<ts>.csv, embryos_*_<date>.h5, etc.).
 #
 # Left in place:
 #   - subdirectories (already-archived, `checkpoint/`, etc.)
@@ -454,61 +461,6 @@ end
 function _factor_token(x::Float64)
     s = @sprintf("%03d", round(Int, x * 100))
     return s
-end
-
-# Wrap resave_for_ben to produce the post-twitch CSV, optionally vcat'ing the
-# pre-twitch source CSV (translated to the same column schema). If no pretwitch
-# source is provided/found, the output is post-twitch only — non-fatal.
-function _export_post_pretwitch_csv(
-    h5_path::AbstractString,
-    output_csv::AbstractString;
-    pretwitch_csv_path::Union{Nothing, AbstractString},
-    avg_models,
-)
-    # resave_for_ben writes <basename>_for_ben.csv plus _ryan_duplicates.csv
-    # and _ryan_stats.csv. The Ben CSV has columns (cell, time, x, y, z) over
-    # the post-twitch window 381–751 mpfc.
-    ben_csv = replace(h5_path, ".h5" => "_for_ben.csv")
-    isfile(ben_csv) && rm(ben_csv)
-    ben_aux1 = replace(ben_csv, ".csv" => "_ryan_duplicates.csv")
-    isfile(ben_aux1) && rm(ben_aux1)
-    ben_aux2 = replace(ben_csv, ".csv" => "_ryan_stats.csv")
-    isfile(ben_aux2) && rm(ben_aux2)
-
-    ShroffCelegansModels.resave_for_ben(h5_path; target_filename = ben_csv, time_range = (381, 751))
-    posttwitch_df = CSV.read(ben_csv, DataFrame)
-
-    # Normalize to the explicit-export schema:
-    # (lineage_name, minutes_post_first_cleavage, LR_micrometers, DV_micrometers, AP_micrometers)
-    posttwitch_explicit = DataFrame(
-        lineage_name = posttwitch_df.cell,
-        minutes_post_first_cleavage = posttwitch_df.time,
-        LR_micrometers = posttwitch_df.x,
-        DV_micrometers = posttwitch_df.z,
-        AP_micrometers = posttwitch_df.y,
-    )
-
-    if pretwitch_csv_path === nothing
-        CSV.write(output_csv, posttwitch_explicit; writeheader = true)
-        return output_csv
-    end
-
-    # Pre-twitch source: pre-existing user file with at minimum
-    # (cell, time, x, y, z) columns matching the historical format. We trust
-    # it and just rename columns into the explicit schema; downstream consumers
-    # can post-process if needed.
-    pretwitch_df = CSV.read(pretwitch_csv_path, DataFrame)
-    pretwitch_explicit = DataFrame(
-        lineage_name = pretwitch_df.cell,
-        minutes_post_first_cleavage = pretwitch_df.time,
-        LR_micrometers = pretwitch_df.z,
-        DV_micrometers = pretwitch_df.y,
-        AP_micrometers = pretwitch_df.x,
-    )
-
-    combined = vcat(pretwitch_explicit, posttwitch_explicit)
-    CSV.write(output_csv, combined; writeheader = true)
-    return output_csv
 end
 
 # Convert a Windows-style cache key path ("X:\foo\bar") to the equivalent

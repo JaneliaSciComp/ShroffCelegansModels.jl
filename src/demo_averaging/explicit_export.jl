@@ -108,12 +108,14 @@ end
 
 """
     write_combined_explicit_csvs(; output_dir, avg_models, ben_csv_path,
-                                   prefix = "pretwitch_posttwitch", date_str = ...)
+                                   prefix = "", date_str = ...)
 
-Write three CSVs into `output_dir`:
-  - `<prefix>_pretwitch_<date>.csv`
-  - `<prefix>_posttwitch_<date>.csv`
-  - `<prefix>_combined_<date>.csv`
+Write three CSVs into `output_dir` (with the default empty `prefix`):
+  - `pretwitch_<date>.csv`
+  - `posttwitch_<date>.csv`
+  - `combined_<date>.csv`
+
+A non-empty `prefix` is prepended as `<prefix>_…`.
 
 Returns the same NamedTuple as `get_combined_explicit_df` with the
 output paths attached.
@@ -122,7 +124,7 @@ function write_combined_explicit_csvs(;
     output_dir::AbstractString,
     avg_models,
     ben_csv_path::AbstractString,
-    prefix::AbstractString = "pretwitch_posttwitch",
+    prefix::AbstractString = "",
     date_str::AbstractString = Dates.format(Dates.now(), "yyyy_mm_dd_HHMMSS"),
     pretwitch_df::DataFrame = get_pretwitch_df(),
     annotation_name_translation_df::DataFrame = get_annotation_name_translation_df(),
@@ -134,9 +136,10 @@ function write_combined_explicit_csvs(;
         pretwitch_df = pretwitch_df,
         annotation_name_translation_df = annotation_name_translation_df,
     )
-    pretwitch_path = joinpath(output_dir, "$(prefix)_pretwitch_$(date_str).csv")
-    posttwitch_path = joinpath(output_dir, "$(prefix)_posttwitch_$(date_str).csv")
-    combined_path = joinpath(output_dir, "$(prefix)_combined_$(date_str).csv")
+    _p = isempty(prefix) ? "" : "$(prefix)_"
+    pretwitch_path = joinpath(output_dir, "$(_p)pretwitch_$(date_str).csv")
+    posttwitch_path = joinpath(output_dir, "$(_p)posttwitch_$(date_str).csv")
+    combined_path = joinpath(output_dir, "$(_p)combined_$(date_str).csv")
     CSV.write(pretwitch_path, result.pretwitch_explicit_df)
     CSV.write(posttwitch_path, result.posttwitch_for_ben_explicit_df)
     CSV.write(combined_path, result.combined_df)
