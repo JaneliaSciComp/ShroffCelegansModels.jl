@@ -85,6 +85,7 @@ module ShroffCelegansModels
     include("seam_cell_to_lineage_map.jl")
     include("demo_averaging/explicit_export.jl")
     include("recompute_pipeline.jl")
+    include("csv_archive_to_hdf5.jl")
     include("makie.jl")
 
     include("precompile.jl")
