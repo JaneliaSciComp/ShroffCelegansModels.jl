@@ -15,6 +15,8 @@ function average_annotations(
     avg_models::Vector{<: CelegansModel} = avg_models,
     use_cell_key_annotations_only = true,
     checkpoint_dir::Union{Nothing, AbstractString} = nothing,
+    progress_counter::Union{Nothing, Threads.Atomic{Int}} = nothing,
+    progress_total::Union{Nothing, Int} = nothing,
 )
     if isa(timepoints, Integer)
         N_timepoints = timepoints
@@ -24,6 +26,8 @@ function average_annotations(
         datasets, cache, timepoints;
         avg_models = avg_models,
         checkpoint_dir = checkpoint_dir,
+        progress_counter = progress_counter,
+        progress_total = progress_total,
     )
     group_annotation_positions_over_time::Vector{Vector{Dict{String, Point3{Float64}}}}
     #common_annotations = intersect(map(datasets_info) do dataset_info
@@ -59,8 +63,15 @@ function average_annotations(
     use_cell_key_annotations_only = true,
     checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )
-    average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k
-           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only, checkpoint_dir)
+    # Shared progress state so every group's "step6 dataset done" line is
+    # numbered against the grand total of datasets across all groups, making
+    # overall progress estimable (otherwise each group restarts at 1/N).
+    grand_total = sum(length, values(datasets); init = 0)
+    progress_counter = Threads.Atomic{Int}(0)
+    group_keys = collect(keys(datasets))
+    average_annotations_dict = Dict(group_keys .=> map(enumerate(group_keys)) do (gi, k)
+           @info "[6/8] Averaging group" group=k group_number=string(gi, "/", length(group_keys)) n_datasets=length(datasets[k]) datasets_done=progress_counter[] grand_total
+           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only, checkpoint_dir, progress_counter, progress_total=grand_total)
     end)
     return average_annotations_dict
 end

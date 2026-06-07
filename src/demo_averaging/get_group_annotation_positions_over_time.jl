@@ -65,6 +65,8 @@ function get_group_annotation_positions_over_time(
     normalized_timepoints::AbstractVector{Float64} = LinRange(0,1,201);
     avg_models::Vector{<: CelegansModel} = avg_models,
     checkpoint_dir::Union{Nothing, AbstractString} = nothing,
+    progress_counter::Union{Nothing, Threads.Atomic{Int}} = nothing,
+    progress_total::Union{Nothing, Int} = nothing,
 )::Vector{Vector{Dict{String, Point3{Float64}}}}
     @assert length(avg_models) == length(normalized_timepoints)
 
@@ -75,6 +77,14 @@ function get_group_annotation_positions_over_time(
     t_info = time()
     datasets_info = get_datasets_info(datasets)
     @info "get_datasets_info done" elapsed_s=round(time() - t_info; digits=2)
+
+    # Global progress numbering: when the caller (the Dict-keyed
+    # average_annotations) threads a shared counter + grand total through, each
+    # "step6 dataset done" line is numbered against ALL datasets across every
+    # group, so overall progress is estimable. Standalone calls fall back to
+    # this group's own dataset count.
+    grand_total = progress_total === nothing ? length(datasets_info) : progress_total
+    done_counter = progress_counter === nothing ? Threads.Atomic{Int}(0) : progress_counter
 
     # Parallelize across datasets — the inner per-timepoint loop is replaced
     # with a sequential map so we don't oversubscribe threads. Each dataset's
@@ -126,9 +136,11 @@ function get_group_annotation_positions_over_time(
         else
             0
         end
+        n_done = Threads.atomic_add!(done_counter, 1) + 1
         @info("step6 dataset done",
-            idx = ds_idx,
-            total = length(datasets_info),
+            dataset = string(n_done, "/", grand_total),
+            group_idx = ds_idx,
+            group_total = length(datasets_info),
             path = dataset.path,
             thread = Threads.threadid(),
             n_annotations = length(annotation_dict),
