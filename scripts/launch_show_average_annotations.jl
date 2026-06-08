@@ -23,6 +23,8 @@ using ShroffCelegansModels:
     transform_annotations,
     load_straightened_annotations_over_time,
     get_cell_trajectory_dict,
+    get_datasets_info,
+    get_group_annotation_positions_over_time,
     fix_annotation_ap_axis,
     fix_annotation_ap_axis_persist_listen,
     fix_annotation_ap_axis_persist_server,

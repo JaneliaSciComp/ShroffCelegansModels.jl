@@ -38,6 +38,22 @@ build precompiles against. The deployment has no image trigger, so after a succe
 build run `oc rollout restart deployment/shroff-data-test -n shroff-data-test` to pick
 up the new `:latest` image.
 
+### After deploying: run the endpoint check
+
+After any rebuild/redeploy (`oc start-build …` + `oc rollout restart …`),
+verify the web endpoints with:
+
+```
+julia --project=web deployment/post_deploy_check.jl [host]
+```
+
+It GETs every public Julia endpoint and checks both the HTTP status **and**
+the response body for a Julia-exception signature — Bonito renders a
+server-side error into the page with HTTP 200, so a status-only check misses
+render-time failures. Host defaults to the test env; pass
+`shroff-data.int.janelia.org` (or set `SHROFF_CHECK_HOST`) to check production.
+Exit code is non-zero if any endpoint fails.
+
 ### Live data location (important)
 
 The pipeline and web service read/write data on an **OpenShift PVC**, not the
