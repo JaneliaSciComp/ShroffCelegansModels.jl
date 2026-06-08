@@ -36,7 +36,7 @@ using ShroffCelegansModels.MIPAVIO: get_annotation_modified_times_unix,
                                     get_lattice_modified_times_unix,
                                     save_all_modified_times_unix
 
-include(joinpath(@__DIR__, "..", "..", "src", "demo_averaging", "read_config_json.jl"))
+using ShroffCelegansModels: read_config_json
 
 # A single (group, dataset_index, timepoint_index) tuple whose mtime advanced
 # between two snapshots, tagged by `kind` (:annotation or :lattice).

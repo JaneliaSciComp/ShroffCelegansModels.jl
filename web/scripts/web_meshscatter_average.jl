@@ -2,11 +2,9 @@ using WGLMakie
 using Bonito
 using ShroffCelegansModels
 
-#push!(LOAD_PATH, "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl")
-push!(LOAD_PATH, dirname(dirname(pathof(ShroffCelegansModels))))
-include("../../src/demo_averaging/save_cache.jl")
-include("../../src/demo_averaging/average_annotations.jl")
 include("../../scripts/meshscatter_average.jl")
+
+using ShroffCelegansModels: load_average_annotations, load_annotation_cache
 
 function black_body(fig)
     DOM.body(fig, style=Styles(CSS("background-color" => "black")))

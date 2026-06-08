@@ -1,8 +1,10 @@
 using WGLMakie
 using Bonito
+using ShroffCelegansModels
 
-include("../../src/demo_averaging/save_cache.jl")
 include("../../scripts/meshscatter_all.jl")
+
+using ShroffCelegansModels: load_annotation_cache
 
 function meshscatter_all_webapp()
     app = App(; title="Shroff Lab: C. elegans meshscatter_all") do
