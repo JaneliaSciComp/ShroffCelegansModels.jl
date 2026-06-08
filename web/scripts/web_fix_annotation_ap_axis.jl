@@ -50,7 +50,11 @@ function web_debug_annotation_ap_axis(datasets = datasets)
 end
 
 function web_main()
-    Threads.@spawn fix_annotation_ap_axis_persist_server()
+    # Bind the persist listener synchronously so a bind failure surfaces here
+    # instead of being silently swallowed by the spawned task (see
+    # fix_annotation_ap_axis_persist_listen). Only the accept loop is spawned.
+    persist_listener = fix_annotation_ap_axis_persist_listen()
+    Threads.@spawn fix_annotation_ap_axis_persist_server(persist_listener)
     WGLMakie.activate!(; resize_to = :body)
     server = web_debug_annotation_ap_axis()
 end

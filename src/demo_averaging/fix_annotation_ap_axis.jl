@@ -665,9 +665,28 @@ function AnnotationChange(;
     )
 end
 
-function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVER_PORT)
+"""
+    fix_annotation_ap_axis_persist_listen(; port = ANNOTATION_PERSIST_SERVER_PORT)
+
+Bind the annotation-persist TCP listener and return the `Sockets.TCPServer`.
+
+Kept separate from the accept loop so a caller can bind *synchronously* and let
+any bind failure (e.g. `EADDRINUSE`) propagate, before handing the listener to a
+background task. Doing the `listen` inside a fire-and-forget `Threads.@spawn`
+swallows such errors silently, which under a multithreaded runtime left the
+server unbound with no log (connection refused on the client side).
+"""
+function fix_annotation_ap_axis_persist_listen(; port = ANNOTATION_PERSIST_SERVER_PORT)
     server = Sockets.listen(port)
     @info "Server listening on port $port"
+    return server
+end
+
+function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVER_PORT)
+    fix_annotation_ap_axis_persist_server(fix_annotation_ap_axis_persist_listen(; port))
+end
+
+function fix_annotation_ap_axis_persist_server(server::Sockets.TCPServer)
     server_running = true
     while server_running
         client = Sockets.accept(server)
