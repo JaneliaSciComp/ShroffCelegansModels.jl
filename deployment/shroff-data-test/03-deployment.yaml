@@ -129,7 +129,9 @@ spec:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -164,7 +166,9 @@ spec:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
