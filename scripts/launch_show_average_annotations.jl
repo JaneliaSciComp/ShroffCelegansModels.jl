@@ -36,6 +36,7 @@ using ShroffCelegansModels:
     my_annotation_position_cache,
     annotation_position_cache,
     load_avg_models,
+    load_latest_avg_models,
     save_annotation_cache,
     load_annotation_cache,
     prime_annotation_caches,

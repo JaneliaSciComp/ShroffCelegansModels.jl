@@ -101,6 +101,10 @@ function load_annotations_cache(
     annotations_cache = annotations_cache;
     filename = joinpath(@__DIR__, "..", "..", "annotations_cache.h5")
 )
+    if !isfile(filename)
+        @warn "Annotations cache not found; leaving annotations_cache empty (will be computed lazily)" filename
+        return annotations_cache
+    end
     # Accumulate per-key state during traversal, then build immutable
     # AnnotationsCacheValue entries in a single finalize pass.
     annotations_by_key = Dict{
@@ -195,6 +199,10 @@ function load_annotations_cache(
 end
 
 function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_annotation_position_cache.h5"))
+    if !isfile(filename)
+        @warn "Annotation position cache not found; leaving my_annotation_position_cache empty (will be computed lazily)" filename
+        return my_annotation_position_cache
+    end
     function _descend(p::Union{HDF5.File,HDF5.Group})
         for k in keys(p)
             _descend(p[k])
@@ -237,4 +245,5 @@ function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_a
     h5open(filename, "r") do h5f
         _descend(h5f)
     end
+    return my_annotation_position_cache
 end

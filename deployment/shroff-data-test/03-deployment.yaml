@@ -186,6 +186,10 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
@@ -216,6 +220,10 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
@@ -245,6 +253,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:

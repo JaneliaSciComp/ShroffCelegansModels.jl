@@ -42,7 +42,10 @@ if recalculate_avg_models
     avg_models = get_avg_models()
 else
     @info "Loading average models"
-    avg_models = load_avg_models("celegans_avg_models_2024_07_26.h5")
+    # Load the recompute pipeline's average models (avg_models_n<N>.h5) from the
+    # PVC; the old bundled celegans_avg_models_2024_07_26.h5 is outdated and is
+    # no longer shipped in the image.
+    avg_models = load_latest_avg_models()
 end
 
 # annotations_cache / my_annotation_position_cache / annotation_position_cache

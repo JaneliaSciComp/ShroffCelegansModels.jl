@@ -98,6 +98,10 @@ end
 
 function load_average_annotations(; filename = "average_annotations.h5")
     d = Dict{String, @NamedTuple{annotations::Vector{String}, positions::Vector{Vector{Point{3, Float64}}}}}()
+    if !isfile(filename)
+        @warn "Average annotations file not found; returning empty dict" filename
+        return d
+    end
     h5open(filename) do h5f
         for k in keys(h5f)
             h5g = h5f[k]
