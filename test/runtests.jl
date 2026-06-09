@@ -2,5 +2,7 @@ using ShroffCelegansModels
 using Test
 
 @testset "ShroffCelegansModels.jl" begin
-    # Write your tests here.
+    include("cache_path.jl")
+    include("annotation_cache.jl")
+    include("avg_models.jl")
 end

@@ -3,6 +3,17 @@ using ColorTypes
 using Makie: VideoStream
 using Base64
 
+# Makie-saved videos report a degenerate framerate (1//0) that libx264 rejects at
+# codec-open ("Could not open codec: Return code -22"). Return a positive, finite
+# framerate, falling back to `default` for any non-finite/non-positive value.
+function sane_framerate(fr; default = 24, source = nothing)
+    if isfinite(float(fr)) && float(fr) > 0
+        return fr
+    end
+    @warn "Invalid video framerate $(fr); defaulting to $default" source
+    return default
+end
+
 function crop_bounds(img; offset=50)
     d1 = sum(@view(img[(offset+1):end,(offset+1):end]), dims=2)
     d2 = sum(@view(img[(offset+1):end,(offset+1):end]), dims=1)
@@ -29,15 +40,9 @@ function crop_video(
     last_frame = read(vio)
     bounds = crop_bounds(last_frame; offset)
     seekstart(vio)
-    # Makie-saved videos report a degenerate framerate (1//0) that libx264
-    # rejects at codec-open ("Could not open codec: Return code -22"). Prefer an
-    # explicitly-passed framerate (e.g. vs.options.framerate) and fall back to 24
-    # if the value read from the file isn't a positive, finite rate.
-    _framerate = isnothing(framerate) ? VideoIO.framerate(vio) : framerate
-    if !isfinite(float(_framerate)) || float(_framerate) <= 0
-        @warn "Invalid video framerate $(_framerate); defaulting to 24" filename
-        _framerate = 24
-    end
+    # Prefer an explicitly-passed framerate (e.g. vs.options.framerate); fall back
+    # to the file's rate, sanitized (Makie files report a degenerate 1//0).
+    _framerate = sane_framerate(isnothing(framerate) ? VideoIO.framerate(vio) : framerate; source = filename)
     # ffmpeg -i 2024_10_11_edited_xz_v2_cropped.mp4 -profile:v high422 -crf 17 -preset slow -c:v libx264 -pix_fmt yuv420p -an 2024_10_11_edited_xz_v5_cropped.mp4
     open_video_out(
         out_filename,
