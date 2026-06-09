@@ -111,6 +111,11 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
@@ -140,6 +145,11 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:
