@@ -208,8 +208,18 @@ function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_a
         idx = pop!(_paths)
         idx = parse(Int, idx)
 
-        _paths[1] = _paths[1] * ":\\"
-        _path = joinpath(_paths...)
+        # Reconstruct the cache key from the HDF5 group hierarchy. A single-
+        # character root is a Windows drive letter (e.g. "X") written from a
+        # Windows-built cache — keep the "X:\…" form so alias_cache_unix maps it
+        # to the Linux dataset path. Any longer root (e.g. "nearline", written by
+        # the recompute pipeline on Linux) is already an absolute Linux path that
+        # equals dataset.path, so reconstruct it directly without mangling.
+        if length(_paths[1]) == 1
+            _paths[1] = _paths[1] * ":\\"
+            _path = joinpath(_paths...)
+        else
+            _path = "/" * join(_paths, "/")
+        end
 
         data = d[]
         pts = Point3{Float64}.(eachrow(data))
@@ -227,4 +237,23 @@ function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_a
     h5open(filename, "r") do h5f
         _descend(h5f)
     end
+end
+
+"""
+    load_latest_annotation_cache()
+
+Load `my_annotation_position_cache` from the freshest available
+`my_annotation_position_cache.h5` — the recompute pipeline's output on the PVC
+when it's newer than the snapshot baked into the image, else the baked-in copy
+(see `_latest_cache_path`).
+
+The package preloads this cache at module init, but that load is frozen into the
+precompiled image (the bundled snapshot), so the runtime PVC copy is never picked
+up through init. Call this explicitly at service startup to load the current
+pipeline cache at runtime.
+"""
+function load_latest_annotation_cache()
+    chosen = _latest_cache_path("my_annotation_position_cache.h5")
+    @info "Loading annotation position cache" chosen
+    return load_annotation_cache(; filename = chosen)
 end

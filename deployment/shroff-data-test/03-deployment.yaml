@@ -81,6 +81,11 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_annotation_cache reads the recompute
+            # my_annotation_position_cache.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 4Gi

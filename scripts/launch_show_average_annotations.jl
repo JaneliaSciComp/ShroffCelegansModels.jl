@@ -38,6 +38,7 @@ using ShroffCelegansModels:
     load_avg_models,
     save_annotation_cache,
     load_annotation_cache,
+    load_latest_annotation_cache,
     save_annotations_cache,
     load_annotations_cache
 
@@ -66,17 +67,29 @@ function alias_cache(drive_letter)
 end
 
 function alias_cache_unix(prefix)
+    # Map Windows-rooted cache keys (X:\…) to the Linux dataset.path. load_annotation_cache
+    # reconstructs the X-tree keys via joinpath on Linux, producing an "X:\/shrofflab/…"
+    # form; after the prefix + backslash substitution that leaves a doubled slash
+    # ("/nearline/shroff//shrofflab/…"), so collapse it to single so the alias matches
+    # the runtime dataset.path (e.g. /nearline/shroff/shrofflab/.../RegB).
+    #
+    # Use get! so we never overwrite a key already present: the recompute cache's
+    # Linux-rooted (nearline) entries load directly under their canonical dataset.path,
+    # and those fresh values must win over a legacy X-tree alias that maps to the same
+    # path. Re-processing an already-aliased key is a no-op (no X:\ / backslash remain),
+    # so iterating while inserting is safe.
     for (k,v) in my_annotation_position_cache
         k2 = replace(k, raw"X:\\" => "$(prefix)")
         k2 = replace(k2, "\\" => "/")
-        my_annotation_position_cache[k2] = v
+        k2 = replace(k2, "//" => "/")
+        get!(my_annotation_position_cache, k2, v)
     end
     for (k,v) in annotations_cache
         a, b, c = k
         a = replace(a, raw"X:\\" => "$(prefix)")
         a = replace(a, "\\" => "/")
-        k2 = (a,b,c)
-        annotations_cache[k2] = v
+        a = replace(a, "//" => "/")
+        get!(annotations_cache, (a,b,c), v)
     end
 end
 

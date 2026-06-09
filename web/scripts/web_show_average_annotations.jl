@@ -35,6 +35,15 @@ function web_show_average_annotations(datasets = datasets)
 end
 
 function web_main()
+    # Populate my_annotation_position_cache so the first render of each dataset
+    # reuses precomputed group annotation positions instead of recomputing
+    # transform_annotations over every timepoint. alias_cache_unix maps the
+    # Windows-rooted cache keys to the Linux dataset.path used at runtime; it
+    # must run *after* load, since the launch script's include-time alias ran on
+    # an empty cache.
+    @info "Loading annotation cache"
+    load_latest_annotation_cache()
+    alias_cache_unix("/nearline/shroff/")
     WGLMakie.activate!(; resize_to = :body)
     server = web_show_average_annotations()
 end
