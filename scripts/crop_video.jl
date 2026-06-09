@@ -34,7 +34,10 @@ function crop_video(
         out_filename,
         @view(last_frame[bounds...]);
         codec_name = "libx264",
-        encoder_options = (; crf=17, preset="slow", profile="high422"),
+        # profile must match target_pix_fmt: "high422" requires 4:2:2 chroma, but
+        # we encode yuv420p (4:2:0) for broad browser playback, so use "high".
+        # (high422 + yuv420p made libx264 fail to open the codec: EINVAL -22.)
+        encoder_options = (; crf=17, preset="slow", profile="high"),
         target_pix_fmt = VideoIO.AV_PIX_FMT_YUV420P,
         framerate = _framerate
     ) do writer
