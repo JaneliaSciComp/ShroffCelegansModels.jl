@@ -26,6 +26,22 @@ function read_marker(path::AbstractString)
     return JSON3.read(read(path, String))
 end
 
+# Trigger a recompute when annotation_changes.h5 (the edits written by the web
+# service's persist server) is newer than the last pipeline run. The marker
+# mechanism only covers /nearline dataset (annotation CSV + lattice) mtime
+# changes, so without this an annotation edit would never trigger a recompute.
+# "Last run" = newest mtime among the top-level files in the recompute output
+# dir (the pipeline rewrites those each run; archived/checkpoint subdirs skipped).
+function annotation_changes_pending()
+    changes = get(ENV, "ANNOTATION_CHANGES_PATH", "/data/annotations/annotation_changes.h5")
+    isfile(changes) || return false
+    output_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
+    isdir(output_dir) || return true   # never run before
+    outputs = filter(isfile, joinpath.(output_dir, readdir(output_dir)))
+    isempty(outputs) && return true
+    return mtime(changes) > maximum(mtime, outputs)
+end
+
 function run_pipeline(marker)
     kinds = if haskey(marker, :kinds)
         String[String(k) for k in marker[:kinds]]
@@ -47,12 +63,16 @@ function main()
     marker_path = joinpath(output_dir, MARKER_NAME)
 
     marker = read_marker(marker_path)
+    if marker === nothing && annotation_changes_pending()
+        @info "annotation_changes.h5 is newer than the last recompute output — triggering recompute"
+        marker = Dict(:kinds => ["annotation", "lattice"], :reason => "annotation_changes_newer")
+    end
     if marker === nothing
-        @info "No recompute marker — nothing to do" marker_path
+        @info "No recompute marker and annotation_changes.h5 not newer — nothing to do" marker_path
         return
     end
 
-    @info "Recompute marker found — running pipeline" marker_path marker
+    @info "Running recompute pipeline" marker_path marker
     started_at = now()
     success = try
         run_pipeline(marker)
