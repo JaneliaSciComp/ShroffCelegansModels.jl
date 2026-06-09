@@ -53,12 +53,12 @@ function _latest_cache_path(filename::AbstractString)
     recompute_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
     baked_in = joinpath(@__DIR__, "..", filename)
     recomputed = joinpath(recompute_dir, filename)
-    if isfile(recomputed)
-        if !isfile(baked_in) || mtime(recomputed) > mtime(baked_in)
-            return recomputed
-        end
-    end
-    return baked_in
+    # Prefer the recompute pipeline's PVC output whenever it exists; the baked-in
+    # copy is only a fallback (fresh environments / before the first pipeline run).
+    # Do NOT compare mtimes: the image build resets the baked-in file's mtime to
+    # build time, so it would almost always look "newer" than the pipeline output
+    # and the PVC cache would never be picked up.
+    return isfile(recomputed) ? recomputed : baked_in
 end
 
 """
