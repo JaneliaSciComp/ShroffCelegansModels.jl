@@ -91,7 +91,10 @@ spec:
               memory: 4Gi
               cpu: 250m
             limits:
-              memory: 4Gi
+              # loads avg_models_n*.h5 + my_annotation_position_cache.h5 +
+              # annotations_cache.h5 from the PVC (larger than the old bundled
+              # snapshots); 4Gi OOM-killed it, so allow headroom.
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
