@@ -76,6 +76,7 @@ module ShroffCelegansModels
     include("demo_averaging/transform_annotations.jl")
     include("demo_averaging/get_group_annotation_positions_over_time.jl")
     include("demo_averaging/average_annotations.jl")
+    include("demo_averaging/add_seam_cells_as_annotations.jl")
     include("demo_averaging/smooth_average_annotations.jl")
     include("demo_averaging/resave_for_ben.jl")
     # seam_cell_to_lineage_map.jl defines get_pretwitch_df,

@@ -221,6 +221,15 @@ function run_recompute_pipeline(;
         )
     end
 
+    # Inject seam-cell positions as an annotation group before smoothing. The
+    # averaged-annotation dict only carries the cell-key annotations; the seam
+    # cells (derived from the average lattice models themselves) must be added
+    # explicitly so the meshscatter web app renders them too.
+    _phase("6.25/8 add_seam_cells") do
+        @info "[6.25/8] Adding seam cells as annotations" n_models=length(avg_models)
+        avg_dict["seam_cells"] = ShroffCelegansModels.seam_cells_as_annotations(avg_models)
+    end
+
     smoothed = _phase("6.5/8 smooth") do
         @info "[6.5/8] Smoothing" smooth_factor_r smooth_factor_θ smooth_factor_z
         ShroffCelegansModels.smooth_average_annotations(
