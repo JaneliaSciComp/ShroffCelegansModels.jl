@@ -24,6 +24,7 @@
 # Exit code is 0 only if every endpoint is healthy, else 1 — suitable for CI.
 
 using HTTP
+using Printf
 
 const DEFAULT_HOST = "shroff-data-test.int.janelia.org"
 
@@ -63,12 +64,12 @@ end
 
 function probe(url; verify)
     try
-        r = HTTP.get(url; status_exception = false, redirect = true,
+        t = @elapsed r = HTTP.get(url; status_exception = false, redirect = true,
                      require_ssl_verification = verify,
                      connect_timeout = 10, readtimeout = 60, retry = false)
-        return (r.status, String(r.body), nothing)
+        return (r.status, String(r.body), nothing, t)
     catch e
-        return (nothing, nothing, e)
+        return (nothing, nothing, e, nothing)
     end
 end
 
@@ -85,15 +86,16 @@ function main()
     failures = 0
     for (label, path) in ENDPOINTS
         url = base * path
-        status, body, err = probe(url; verify)
+        status, body, err, elapsed = probe(url; verify)
         marker  = body === nothing ? nothing : error_marker(body)
         healthy = status !== nothing && 200 <= status < 400 && marker === nothing
         healthy || (failures += 1)
         mark = healthy ? "PASS" : "FAIL"
+        timing = elapsed === nothing ? "  ?.?s" : @sprintf("%5.1fs", elapsed)
         detail = status === nothing ? "ERROR " * sprint(showerror, err) :
                  marker !== nothing ? "HTTP $status, but body contains \"$marker\"" :
                  "HTTP $status"
-        println("  $mark  $(rpad(label, width))  $detail")
+        println("  $mark  $timing  $(rpad(label, width))  $detail")
     end
 
     n = length(ENDPOINTS)
