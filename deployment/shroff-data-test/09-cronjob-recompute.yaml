@@ -1,7 +1,13 @@
-# Runs every 15 minutes; checks the shared annotations PVC for a
-# `pending_recompute` marker written by the daily save-modified-times CronJob.
-# When the marker is present, executes the recompute pipeline (currently a
-# stub) and removes the marker on success.
+# Runs once daily at 03:00 ET, just after the 02:00 save-modified-times
+# CronJob; checks the shared annotations PVC for a `pending_recompute`
+# marker. When the marker is present, executes the recompute pipeline and
+# removes the marker on success.
+#
+# Schedule lowered from every-15-minutes to once-daily so the cron can't
+# race the long-running manual recompute jobs on the shared
+# /data/annotations/recompute/checkpoint/ directory (see task #41 — both
+# pipelines used the same path; cron's success-path rm wiped the manual
+# job's in-flight checkpoints, producing dozens of H5 ENOENT warnings).
 #
 # Uses the default ServiceAccount — no special RBAC needed because all
 # coordination happens via files on the shared PVC.
@@ -14,7 +20,7 @@ metadata:
     app: shroff-data-test
     component: recompute-on-mtime-change
 spec:
-  schedule: "*/15 * * * *"
+  schedule: "0 3 * * *"
   timeZone: "America/New_York"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
@@ -23,7 +29,9 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 14400
+      # 12h — a cold-cache full N=371 recompute can exceed the previous 4h
+      # (it did once, finishing only via an 8h resume job).
+      activeDeadlineSeconds: 43200
       template:
         metadata:
           labels:
@@ -43,11 +51,11 @@ spec:
               env:
                 - name: MODIFIED_TIMES_DIR
                   value: /data/annotations/modified_times
-                # Test-cluster validation uses a reduced timepoint count.
-                # Production-grade output expects 371. Override at the env
-                # level (here) when you want a different N for a manual run.
+                # Production-grade output requires N=371. Override here
+                # (env level) if you ever need a faster validation run with
+                # a different N.
                 - name: N_TIMEPOINTS
-                  value: "51"
+                  value: "371"
               volumeMounts:
                 - name: nearline
                   mountPath: /nearline/shroff
