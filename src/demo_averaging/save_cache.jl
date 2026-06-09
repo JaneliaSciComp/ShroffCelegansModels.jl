@@ -173,9 +173,11 @@ function load_annotations_cache(
             fill(NaN, length(_range))
         end
         # Backward-compat: older files have no "mtime" attr → leave as NaN.
+        # `attrs(g)["mtime"]` (AttributeDict) already returns the value, so don't
+        # call read() on it (that throws MethodError: read(::Float64)).
         try
             if haskey(attrs(idx_group), "mtime")
-                mtimes[idx] = Float64(read(attrs(idx_group)["mtime"]))
+                mtimes[idx] = Float64(attrs(idx_group)["mtime"])
             end
         catch err
             @warn "Could not read mtime attr for $(HDF5.name(idx_group))" err
