@@ -254,7 +254,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         controls_visible[] = false
         # compression=10 (CRF) for a high-quality intermediate; Makie's default
         # (20) softens detail before crop_video re-encodes.
-        vs = Record(fig, time_slider.range[]; update=false, compression=10) do t
+        vs = Record(fig, time_slider.range[]; update=false, compression=10, framerate=48) do t
             set_close_to!(time_slider, t)
         end
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
@@ -270,7 +270,7 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         L = time_slider.range[].stop
         _range = 1:L
         # compression=10 (CRF) for a high-quality intermediate (see above).
-        vs = Record(fig, _range; update=false, compression=10) do t
+        vs = Record(fig, _range; update=false, compression=10, framerate=48) do t
             if t <= L
                 set_close_to!(time_slider, t)
             elseif t <= 2L
