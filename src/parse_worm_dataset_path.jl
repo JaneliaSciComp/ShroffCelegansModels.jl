@@ -61,24 +61,39 @@ function _latest_cache_path(filename::AbstractString)
     return baked_in
 end
 
-# initialize my_annotation_position_cache
-try
-    if isempty(my_annotation_position_cache)
-        path = _latest_cache_path("my_annotation_position_cache.h5")
-        @info "Loading straightened annotation positions..." path
-        load_annotation_cache(; filename = path)
+"""
+    prime_annotation_caches()
+
+Load `my_annotation_position_cache` and `annotations_cache` from the freshest
+available HDF5 — the recompute pipeline's PVC output when it's newer than the
+snapshot baked into the image, else the baked-in copy (see `_latest_cache_path`).
+Each load is guarded by `isempty`, so it's a no-op once primed.
+
+This logic used to run at module top level, but module bodies execute during
+*precompilation* — which froze the build-time (bundled, Windows-keyed) snapshot
+into the .ji and meant the runtime PVC copy was never picked up. Call this
+explicitly at service startup instead (the recompute pipeline and the
+show_average web app do).
+"""
+function prime_annotation_caches()
+    try
+        if isempty(my_annotation_position_cache)
+            path = _latest_cache_path("my_annotation_position_cache.h5")
+            @info "Loading straightened annotation positions..." path
+            load_annotation_cache(; filename = path)
+        end
+    catch err
+        @warn "There was an issue loading the annotation cache" err
     end
-catch err
-    @warn "There was an issue loading the annotation cache" err
-end
-try
-    if isempty(annotations_cache)
-        path = _latest_cache_path("annotations_cache.h5")
-        @info "Loading warped annotation positions..." path
-        load_annotations_cache(; filename = path)
+    try
+        if isempty(annotations_cache)
+            path = _latest_cache_path("annotations_cache.h5")
+            @info "Loading warped annotation positions..." path
+            load_annotations_cache(; filename = path)
+        end
+    catch err
+        @warn "There was an issue loading the warped annotation cache" err
     end
-catch err
-    @warn "There was an issue loading the my annotation cache" err
 end
 
 function save_annotation_position_cache(

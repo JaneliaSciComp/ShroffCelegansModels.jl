@@ -106,12 +106,18 @@ function run_recompute_pipeline(;
         return datasets, flattened
     end
 
-    # parse_worm_dataset_path.jl pre-loads `annotations_cache` and
-    # `my_annotation_position_cache` at module init from HDF5 snapshots baked
-    # into the container image — those entries are stale relative to /nearline.
-    # Selectively invalidate only datasets whose mtimes have advanced since
-    # the cache was populated; unchanged datasets stay cached so the priming
-    # step is a no-op for them.
+    # Prime `annotations_cache` and `my_annotation_position_cache` at runtime
+    # (this used to run at module init, but that baked the build-time snapshot
+    # into the .ji — see prime_annotation_caches). Phase 0 just archived the
+    # previous run's PVC cache out of output_dir, so `_latest_cache_path` falls
+    # back to the baked-in snapshot here — the same warm baseline as before.
+    _phase("1a/8 prime_caches") do
+        prime_annotation_caches()
+    end
+
+    # Selectively invalidate only datasets whose mtimes have advanced since the
+    # cache was populated; unchanged datasets stay cached so the priming step is
+    # a no-op for them.
     _phase("1b/8 invalidate_stale") do
         _invalidate_stale_caches!(flattened, kinds)
     end

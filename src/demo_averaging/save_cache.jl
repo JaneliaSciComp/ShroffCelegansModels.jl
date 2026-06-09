@@ -238,22 +238,3 @@ function load_annotation_cache(; filename = joinpath(@__DIR__, "..", "..", "my_a
         _descend(h5f)
     end
 end
-
-"""
-    load_latest_annotation_cache()
-
-Load `my_annotation_position_cache` from the freshest available
-`my_annotation_position_cache.h5` — the recompute pipeline's output on the PVC
-when it's newer than the snapshot baked into the image, else the baked-in copy
-(see `_latest_cache_path`).
-
-The package preloads this cache at module init, but that load is frozen into the
-precompiled image (the bundled snapshot), so the runtime PVC copy is never picked
-up through init. Call this explicitly at service startup to load the current
-pipeline cache at runtime.
-"""
-function load_latest_annotation_cache()
-    chosen = _latest_cache_path("my_annotation_position_cache.h5")
-    @info "Loading annotation position cache" chosen
-    return load_annotation_cache(; filename = chosen)
-end
