@@ -20,7 +20,8 @@ end
 function crop_video(
     filename::String,
     out_filename::String = replace(filename, ".mp4" => "_cropped.mp4");
-    offset = 50
+    offset = 50,
+    framerate = nothing,
 )
     vio = openvideo(filename)
     N = counttotalframes(vio)
@@ -28,7 +29,15 @@ function crop_video(
     last_frame = read(vio)
     bounds = crop_bounds(last_frame; offset)
     seekstart(vio)
-    _framerate = VideoIO.framerate(vio)
+    # Makie-saved videos report a degenerate framerate (1//0) that libx264
+    # rejects at codec-open ("Could not open codec: Return code -22"). Prefer an
+    # explicitly-passed framerate (e.g. vs.options.framerate) and fall back to 24
+    # if the value read from the file isn't a positive, finite rate.
+    _framerate = isnothing(framerate) ? VideoIO.framerate(vio) : framerate
+    if !isfinite(float(_framerate)) || float(_framerate) <= 0
+        @warn "Invalid video framerate $(_framerate); defaulting to 24" filename
+        _framerate = 24
+    end
     # ffmpeg -i 2024_10_11_edited_xz_v2_cropped.mp4 -profile:v high422 -crf 17 -preset slow -c:v libx264 -pix_fmt yuv420p -an 2024_10_11_edited_xz_v5_cropped.mp4
     open_video_out(
         out_filename,
@@ -54,7 +63,9 @@ function crop_video(vs::VideoStream)
     mktempdir() do dir
         raw_path = save(joinpath(dir, "video.mp4"), vs)
         path = joinpath(dir, "cropped_video.mp4")
-        crop_video(raw_path, path)
+        # the saved file's framerate metadata is degenerate (1//0); pass the
+        # VideoStream's real framerate so the re-encode uses a valid rate.
+        crop_video(raw_path, path; framerate = vs.options.framerate)
 
         # <video> only supports infinite looping, so we loop forever even when a finite number is requested
         loopoption = vs.options.loop ≥ 0 ? (;loop=true) : (;)
