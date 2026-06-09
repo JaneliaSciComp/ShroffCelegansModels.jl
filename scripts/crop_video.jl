@@ -33,6 +33,7 @@ function crop_video(
     out_filename::String = replace(filename, ".mp4" => "_cropped.mp4");
     offset = 50,
     framerate = nothing,
+    crf = 10,
 )
     vio = openvideo(filename)
     N = counttotalframes(vio)
@@ -44,14 +45,14 @@ function crop_video(
     # to the file's rate, sanitized (Makie files report a degenerate 1//0).
     _framerate = sane_framerate(isnothing(framerate) ? VideoIO.framerate(vio) : framerate; source = filename)
     # ffmpeg -i 2024_10_11_edited_xz_v2_cropped.mp4 -profile:v high422 -crf 17 -preset slow -c:v libx264 -pix_fmt yuv420p -an 2024_10_11_edited_xz_v5_cropped.mp4
+    # Lower crf = sharper (less compression); 0 is lossless, 23 is the x264 default.
+    # profile "high" matches the yuv420p we encode for broad browser playback
+    # ("high422" requires 4:2:2 chroma; high422 + yuv420p fails codec-open, EINVAL -22).
     open_video_out(
         out_filename,
         @view(last_frame[bounds...]);
         codec_name = "libx264",
-        # profile must match target_pix_fmt: "high422" requires 4:2:2 chroma, but
-        # we encode yuv420p (4:2:0) for broad browser playback, so use "high".
-        # (high422 + yuv420p made libx264 fail to open the codec: EINVAL -22.)
-        encoder_options = (; crf=17, preset="slow", profile="high"),
+        encoder_options = (; crf, preset="slow", profile="high"),
         target_pix_fmt = VideoIO.AV_PIX_FMT_YUV420P,
         framerate = _framerate
     ) do writer
