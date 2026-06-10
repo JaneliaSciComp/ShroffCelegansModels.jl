@@ -1,0 +1,6 @@
+deployment/
+!deployment/Dockerfile
+!deployment/Dockerfile.base
+backup_*/
+cache_*/
+services/
