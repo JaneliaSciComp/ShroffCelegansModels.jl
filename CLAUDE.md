@@ -16,6 +16,28 @@ The production and test deployments live under:
 - `deployment/shroff-data/` — production
 - `deployment/shroff-data-test/` — test environment (`shroff-data-test.int.janelia.org`)
 
+### Rebuilding the container image (important)
+
+These are **binary** BuildConfigs (`source.type: Binary`): the source is uploaded
+from your working copy on every build. **Always pass `--from-dir=.` and run from the
+repo root.** A build triggered without it (e.g. the web console "Start Build" button,
+or a bare `oc start-build <name>`) receives no source archive and fails immediately
+with `FetchSourceFailed` / "unable to extract binary build input".
+
+```bash
+# App image (~2 min) — routine code changes
+oc start-build shroff-data-test --from-dir=. -n shroff-data-test --follow
+
+# Base image (~7 min) — only when Project.toml / Manifest.toml change
+oc start-build shroff-data-test-base --from-dir=. -n shroff-data-test --follow
+```
+
+The repo is a Julia 1.12 workspace (`[workspace]` in the root `Project.toml`); all
+members share the **root `Manifest.toml`** (now committed), which is what the app
+build precompiles against. The deployment has no image trigger, so after a successful
+build run `oc rollout restart deployment/shroff-data-test -n shroff-data-test` to pick
+up the new `:latest` image.
+
 ### Live data location (important)
 
 The pipeline and web service read/write data on an **OpenShift PVC**, not the

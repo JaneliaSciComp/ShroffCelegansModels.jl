@@ -57,6 +57,15 @@ alias oc='pixi run --manifest-path '"$PWD"'/deployment/pixi.toml oc'
 The `oc` invocations in the rest of this README assume one of the above is in effect.
 Log in with `oc login ...` against the cluster before continuing.
 
+> **Important — always use `--from-dir=.`**
+>
+> These are **binary** BuildConfigs (`source.type: Binary`): the build source is
+> uploaded from your working copy each time. Every `oc start-build` below **must**
+> include `--from-dir=.` and be run from the **repo root**. A build started without
+> it — including the web console's **Start Build** button or a bare
+> `oc start-build <name>` — gets no source archive and fails immediately with
+> `FetchSourceFailed` ("unable to extract binary build input").
+
 ## Two-stage build
 
 The build is split into two images to keep routine deploys fast:

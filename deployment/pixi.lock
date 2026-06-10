@@ -1,13 +1,17 @@
-version: 6
+version: 7
+platforms:
+- name: linux-64
+- name: osx-arm64
+- name: win-64
 environments:
   default:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
-    options:
-      pypi-prerelease-mode: if-necessary-or-explicit
     packages:
       linux-64:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openshift-cli-4.20.2-hfc2019e_0.conda
+      osx-arm64:
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openshift-cli-4.20.2-h820172f_0.conda
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/win-64/openshift-cli-4.20.2-h11686cb_0.conda
 packages:
@@ -18,6 +22,13 @@ packages:
   license_family: APACHE
   size: 107321457
   timestamp: 1762191858837
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/openshift-cli-4.20.2-h820172f_0.conda
+  sha256: eb234b5ed5803458e23fff7e0fc7246bde371b93d95a74ee6b7cc91a2aa35c37
+  md5: 3f4aafa1e55440e03c1643573bb366ff
+  license: Apache-2.0
+  license_family: APACHE
+  size: 106637378
+  timestamp: 1762191892963
 - conda: https://conda.anaconda.org/conda-forge/win-64/openshift-cli-4.20.2-h11686cb_0.conda
   sha256: 9899cbfdb711ffca706fc526d907f2d9999512b64eb30c41bd5c2ed1c80b742d
   md5: 960710ad8ca42e8c1b3fd6df1010a7bd
