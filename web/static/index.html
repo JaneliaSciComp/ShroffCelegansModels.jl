@@ -41,6 +41,26 @@
 			</ul>
 			<p><a href="controls.html">View 3D camera controls</a></p>
 
+			<h2>Visualizations</h2>
+			<ul>
+				<li><a href="/recompute/meshscatter_latest.html">Interactive meshscatter (static export, slider only)</a></li>
+				<li><a href="/recompute/meshscatter_latest.mp4">Meshscatter movie (MP4, 48 fps)</a></li>
+			</ul>
+
+			<h2>Pipeline Status</h2>
+			<p id="pipeline-status"><em>Loading…</em></p>
+			<script>
+				fetch('/recompute/pipeline_status.json')
+					.then(r => r.json())
+					.then(d => {
+						document.getElementById('pipeline-status').innerHTML =
+							'Last pipeline run: ' + d.pipeline_run + '<br>Movie created: ' + d.movie_created;
+					})
+					.catch(() => {
+						document.getElementById('pipeline-status').innerHTML = '<em>Status unavailable</em>';
+					});
+			</script>
+
 			<h2>Outputs</h2>
 			<ul>
 				<li><a href="/recompute/">Latest recompute outputs (HDF5 + CSV)</a></li>

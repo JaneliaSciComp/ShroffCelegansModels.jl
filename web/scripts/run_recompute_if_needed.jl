@@ -15,9 +15,13 @@ Flow:
      invocation retries.
 """
 
-using Dates: now, format
+using Dates: now, format, Dates
 using ShroffCelegansModels
 using ShroffCelegansModels.JSON3
+
+const _scripts_dir = joinpath(@__DIR__, "..", "..", "scripts")
+include(joinpath(_scripts_dir, "export_meshscatter_static.jl"))
+include(joinpath(_scripts_dir, "generate_pipeline_movie.jl"))
 
 const MARKER_NAME = "pending_recompute"
 
@@ -42,6 +46,28 @@ function annotation_changes_pending()
     return mtime(changes) > maximum(mtime, outputs)
 end
 
+function _generate_pipeline_visualizations(h5_path::AbstractString)
+    output_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
+    pipeline_run = Dates.format(Dates.unix2datetime(mtime(h5_path)), "yyyy-mm-ddTHH:MM:SS")
+    avg_dict = ShroffCelegansModels.load_latest_average_annotations(
+        default_filename = basename(h5_path),
+        dir = dirname(h5_path),
+    )
+
+    export_path = joinpath(output_dir, "meshscatter_latest.html")
+    export_meshscatter_static(avg_dict; output_path = export_path)
+
+    movie_path = joinpath(output_dir, "meshscatter_latest.mp4")
+    generate_meshscatter_movie(avg_dict; output_path = movie_path)
+
+    movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
+    status = (; pipeline_run, movie_created)
+    open(joinpath(output_dir, "pipeline_status.json"), "w") do io
+        JSON3.write(io, status)
+    end
+    @info "Pipeline visualizations complete" export_path movie_path pipeline_run movie_created
+end
+
 function run_pipeline(marker)
     kinds = if haskey(marker, :kinds)
         String[String(k) for k in marker[:kinds]]
@@ -55,6 +81,13 @@ function run_pipeline(marker)
     n_timepoints = parse(Int, get(ENV, "N_TIMEPOINTS", "371"))
     result = ShroffCelegansModels.run_recompute_pipeline(; kinds = kinds, n_timepoints)
     @info "Pipeline produced artifacts" result
+
+    try
+        _generate_pipeline_visualizations(result.h5_path)
+    catch err
+        @warn "Visualization generation failed (pipeline outputs still valid)" err
+    end
+
     return true
 end
 
