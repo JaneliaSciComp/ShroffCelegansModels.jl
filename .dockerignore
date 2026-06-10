@@ -1,6 +1,8 @@
-deployment/
-!deployment/Dockerfile
-!deployment/Dockerfile.base
+deployment/.pixi/
+deployment/shroff-data/
+deployment/shroff-data-test/
+deployment/pixi.toml
+deployment/pixi.lock
 backup_*/
 cache_*/
 services/
