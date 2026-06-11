@@ -57,15 +57,18 @@ function _generate_pipeline_visualizations(h5_path::AbstractString)
     export_path = joinpath(output_dir, "meshscatter_latest.html")
     export_meshscatter_static(avg_dict; output_path = export_path)
 
-    movie_path = joinpath(output_dir, "meshscatter_latest.mp4")
-    generate_meshscatter_movie(avg_dict; output_path = movie_path)
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "movie_$(view).mp4")
+        generate_meshscatter_movie(avg_dict; output_path = movie_path, view)
+        @info "Movie written" view movie_path
+    end
 
     movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
     status = (; pipeline_run, movie_created)
     open(joinpath(output_dir, "pipeline_status.json"), "w") do io
         JSON3.write(io, status)
     end
-    @info "Pipeline visualizations complete" export_path movie_path pipeline_run movie_created
+    @info "Pipeline visualizations complete" export_path pipeline_run movie_created
 end
 
 function run_pipeline(marker)

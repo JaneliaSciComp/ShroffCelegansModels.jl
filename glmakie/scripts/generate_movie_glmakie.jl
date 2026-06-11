@@ -19,7 +19,7 @@ function generate_meshscatter_movie_gl(average_annotations_dict;
     with_theme(theme_black()) do
         fig, time_slider, ax = meshscatter_average_simple(average_annotations_dict;
             xy_bounding_radius = sqrt(52),
-            figure_size = (1920, 400),
+            figure_size = (1920, 360),
             show_legend = true,
             view = view)
         time_points = time_slider.range[]
