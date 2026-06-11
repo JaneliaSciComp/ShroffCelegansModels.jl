@@ -131,3 +131,21 @@ Log files are written to the path specified by `-o`/`-e`. If those point to a sh
 filesystem, read them directly. If they point to `/tmp` on the compute node, you
 cannot SSH to compute nodes — use `bhist -l <JOBID>` for a summary, or always set
 `-o`/`-e` to a shared path from the start.
+
+### LSF access from Mac
+
+The Janelia LSF cluster is only reachable from within the Janelia network / VPN,
+and the `bsub`/`bjobs`/`bhist` commands are only installed on Janelia Linux login
+nodes (e.g. `login1.int.janelia.org`). A Mac Studio cannot submit or monitor jobs
+directly. See `notes/lsf-from-mac.md` for the SSH-based workflow.
+
+## Notes directory
+
+The `notes/` directory contains run logs, how-to guides, and incident write-ups
+that are too detailed for CLAUDE.md. It is excluded from Docker builds
+(`.dockerignore`) but committed to git so notes are available on any checkout.
+
+Current notes:
+- `notes/copy-movies-to-pvc.md` — how to manually copy MP4 movies to the OpenShift PVC
+- `notes/lsf-from-mac.md` — submitting and monitoring LSF jobs from a Mac via SSH
+- `notes/2026-06-09-recompute-seam-cells.md` — recompute run log (seam-cell injection)
