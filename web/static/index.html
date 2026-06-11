@@ -60,55 +60,59 @@
 			</figure>
 			<script>
 				(function () {
-					var IDS = ['video-yz', 'video-xz'];
-					var syncing = false;
-
-					function withSync(fn) {
-						if (syncing) return;
-						syncing = true;
-						try { fn(); } finally { syncing = false; }
-					}
-
 					document.addEventListener('DOMContentLoaded', function () {
-						var videos = IDS.map(function (id) { return document.getElementById(id); });
+						var videos = ['video-yz', 'video-xz'].map(function (id) {
+							return document.getElementById(id);
+						});
 						var readyCount = 0;
 
-						// Play both as soon as both report canplay
+						// Initialise per-element flag used to suppress echoed events.
+						videos.forEach(function (v) { v._prog = false; });
+
+						// Start both as soon as both report canplay.
 						videos.forEach(function (v) {
 							v.addEventListener('canplay', function onReady() {
 								v.removeEventListener('canplay', onReady);
-								readyCount++;
-								if (readyCount === videos.length) {
-									Promise.all(videos.map(function (v) { return v.play(); })).catch(function () {});
+								if (++readyCount === videos.length) {
+									videos.forEach(function (w) {
+										w.play().catch(function () {});
+									});
 								}
 							});
 						});
 
-						// Mirror play/pause/seek to the other video
+						// Propagate an action to peer videos, guarded by _prog so the
+						// resulting async events don't echo back. The 200 ms window is
+						// enough for play/pause/seeked to settle in all browsers.
 						videos.forEach(function (v) {
-							var others = videos.filter(function (o) { return o !== v; });
+							var peers = videos.filter(function (o) { return o !== v; });
+
+							function propagate(fn) {
+								if (v._prog) return;
+								peers.forEach(function (o) {
+									o._prog = true;
+									fn(o);
+									setTimeout(function () { o._prog = false; }, 200);
+								});
+							}
 
 							v.addEventListener('play', function () {
-								withSync(function () {
-									others.forEach(function (o) {
-										o.currentTime = v.currentTime;
-										o.play().catch(function () {});
-									});
+								propagate(function (o) {
+									o.currentTime = v.currentTime;
+									o.play().catch(function () {});
 								});
 							});
 
 							v.addEventListener('pause', function () {
-								withSync(function () {
-									others.forEach(function (o) {
-										o.pause();
-										o.currentTime = v.currentTime;
-									});
+								propagate(function (o) {
+									o.pause();
+									o.currentTime = v.currentTime;
 								});
 							});
 
 							v.addEventListener('seeked', function () {
-								withSync(function () {
-									others.forEach(function (o) { o.currentTime = v.currentTime; });
+								propagate(function (o) {
+									o.currentTime = v.currentTime;
 								});
 							});
 						});

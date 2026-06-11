@@ -13,7 +13,7 @@ function generate_meshscatter_movie(average_annotations_dict;
     raw_path = replace(output_path, ".mp4" => "_raw.mp4")
     with_theme(theme_black()) do
         fig, time_slider, ax = meshscatter_average_simple(average_annotations_dict;
-            xy_bounding_radius = sqrt(52),
+            xy_bounding_radius = -1,
             figure_size = (1920, 360),
             view)
         time_points = time_slider.range[]
