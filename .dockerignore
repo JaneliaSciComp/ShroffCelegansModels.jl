@@ -5,4 +5,7 @@ deployment/pixi.toml
 deployment/pixi.lock
 backup_*/
 cache_*/
+movies/
+notes/
 services/
+dev/
