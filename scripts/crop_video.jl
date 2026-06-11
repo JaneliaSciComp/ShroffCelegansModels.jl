@@ -52,7 +52,7 @@ function crop_video(
         out_filename,
         @view(last_frame[bounds...]);
         codec_name = "libx264",
-        encoder_options = (; crf, preset="slow", profile="high"),
+        encoder_options = (; crf, preset="fast", profile="high"),
         target_pix_fmt = VideoIO.AV_PIX_FMT_YUV420P,
         framerate = _framerate
     ) do writer

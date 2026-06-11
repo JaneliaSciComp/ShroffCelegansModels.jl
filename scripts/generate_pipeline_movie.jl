@@ -11,12 +11,16 @@ function generate_meshscatter_movie(average_annotations_dict; output_path::Strin
     CairoMakie.activate!()
     raw_path = replace(output_path, ".mp4" => "_raw.mp4")
     with_theme(theme_black()) do
-        fig, time_slider = meshscatter_average_simple(average_annotations_dict; xy_bounding_radius=sqrt(52))
+        fig, time_slider, ax = meshscatter_average_simple(average_annotations_dict;
+            xy_bounding_radius = sqrt(52),
+            figure_size = (1920, 400))
         time_points = time_slider.range[]
+        time_slider.blockscene.visible[] = false
         try
-            record(fig, raw_path, time_points; framerate) do t
+            vs = Record(fig, time_points; framerate, px_per_unit=1, preset="fast", update=false) do t
                 set_close_to!(time_slider, t)
             end
+            save(raw_path, vs)
             crop_video(raw_path, output_path; framerate)
         finally
             isfile(raw_path) && rm(raw_path; force=true)

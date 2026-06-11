@@ -65,3 +65,69 @@ snapshots** — do not treat them as the source of truth. Check the PVC via `oc`
 Key PVC paths (see `recompute_pipeline.jl` defaults):
 - `/data/annotations/annotation_changes.h5` — edits written by the web service
 - `/data/annotations/recompute/` — pipeline output dir (averaged HDF5, CSVs, caches)
+
+## LSF (cluster job scheduler)
+
+Janelia uses IBM LSF for batch jobs. Common queues: `gpu_l4` (NVIDIA L4 GPU nodes),
+`local` (shared CPU nodes). Always bill to `-P scicompsoft`.
+
+```bash
+# Submit a job script
+bsub < scripts/submit_movie_glmakie.bsub
+
+# Check job status
+bjobs <JOBID>
+
+# Detailed job info / exit reason
+bjobs -l <JOBID>
+
+# Job history (after completion)
+bhist -l <JOBID>
+```
+
+### GPU jobs (gpu_l4 queue)
+
+Request a GPU with `-gpu "num=1:j_exclusive=yes"`. GLMakie requires a display
+even for offscreen rendering — use `xvfb-run -a` to provide a virtual X11 display:
+
+```bash
+#BSUB -q gpu_l4
+#BSUB -P scicompsoft
+#BSUB -gpu "num=1:j_exclusive=yes"
+
+xvfb-run -a julia --project=glmakie glmakie/scripts/generate_movie_glmakie.jl "$H5" "$OUT"
+```
+
+`JULIA_GLMAKIE_BACKEND=egl` alone is **not sufficient** — GLFW's `Init()` on Linux
+defaults to `PLATFORM_X11` and fails without a display regardless of the EGL setting.
+
+`JULIA_GLFW_PLATFORM=null` (a proposed fix in GLFW.jl issue #253) routes GLFW through
+`PLATFORM_NULL` which uses OSMesa for off-screen rendering — but OSMesa is not installed
+on these cluster nodes, so it fails with `OSMesa: Library not found`. The `xvfb-run -a`
+workaround remains the only working option on Janelia HPC until OSMesa is available.
+
+### Julia path on compute nodes
+
+`julia` (from juliaup) may not be in PATH on compute nodes. Use the full path:
+
+```bash
+JULIA=/groups/scicompsoft/home/kittisopikulm/.juliaup/bin/julia
+xvfb-run -a "$JULIA" --project=...
+```
+
+### Important: `/tmp` is node-local
+
+Compute nodes do not share `/tmp` with the login node. Input files (h5, etc.) and
+log output must be on a shared NFS path (e.g. `/groups/…` or `movies/`) — not `/tmp`.
+
+```bash
+#BSUB -o /groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/movies/job_%J.log
+#BSUB -e /groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/movies/job_%J.err
+```
+
+### Reading job logs
+
+Log files are written to the path specified by `-o`/`-e`. If those point to a shared
+filesystem, read them directly. If they point to `/tmp` on the compute node, you
+cannot SSH to compute nodes — use `bhist -l <JOBID>` for a summary, or always set
+`-o`/`-e` to a shared path from the start.
