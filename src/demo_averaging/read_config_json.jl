@@ -19,10 +19,14 @@ function read_config_json(config_path::AbstractString = config_path)
     end
     =#
 
+    nearline_base = get(ENV, "NEARLINE_BASE", "/nearline")
+    remap = p -> (nearline_base != "/nearline" && startswith(p, "/nearline")) ?
+        nearline_base * SubString(p, length("/nearline") + 1) : String(p)
+
     datasets = Dict{String, Vector{ShroffCelegansModels.NormalizedDataset}}()
     map(config_json.data.strains) do strain
         datasets[strain.name] = map(strain.folderpaths) do folder_path
-            ShroffCelegansModels.NormalizedDataset(joinpath(folder_path, "RegB"))
+            ShroffCelegansModels.NormalizedDataset(joinpath(remap(folder_path), "RegB"))
         end
         cell_keys[strain.name] = map(datasets[strain.name]) do dataset
             dataset.cell_key

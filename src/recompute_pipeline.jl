@@ -37,6 +37,17 @@ const _DEFAULT_SMOOTH_R = 0.20
 const _DEFAULT_SMOOTH_θ = 0.20
 const _DEFAULT_SMOOTH_Z = 0.30
 
+# Allow running on nodes where /nearline is not mounted (e.g. LSF workers).
+# Set NEARLINE_BASE to the local root that mirrors /nearline — e.g. a directory
+# of unpacked CSV archives — and all /nearline paths will be remapped at
+# pipeline startup time.  Default keeps production behaviour unchanged.
+const _NEARLINE_BASE = get(ENV, "NEARLINE_BASE", "/nearline")
+
+_remap_nearline(path::AbstractString) =
+    startswith(path, "/nearline") && _NEARLINE_BASE != "/nearline" ?
+        _NEARLINE_BASE * SubString(path, length("/nearline") + 1) :
+        String(path)
+
 """
     run_recompute_pipeline(; kwargs...) -> NamedTuple
 
@@ -486,12 +497,14 @@ end
 # format against `dataset.path` for staleness comparison.
 function _normalize_cache_path(p::AbstractString)::String
     s = String(p)
-    occursin('\\', s) || return s
-    # Drive-letter prefix `X:\foo\bar` → `/nearline/shroff/foo/bar`.
-    if length(s) >= 3 && isuppercase(s[1]) && s[2] == ':' && s[3] == '\\'
-        s = "/nearline/shroff/" * s[4:end]
+    if occursin('\\', s)
+        # Drive-letter prefix `X:\foo\bar` → `/nearline/shroff/foo/bar`.
+        if length(s) >= 3 && isuppercase(s[1]) && s[2] == ':' && s[3] == '\\'
+            s = "/nearline/shroff/" * s[4:end]
+        end
+        s = replace(s, "\\" => "/")
     end
-    return replace(s, "\\" => "/")
+    return _remap_nearline(s)
 end
 
 # Selective cache invalidation. Stats current annotation+lattice mtimes for
