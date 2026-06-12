@@ -1798,8 +1798,8 @@ version = "1.11.0"
 
 [[deps.ThinPlateSplines]]
 deps = ["LinearAlgebra", "Test", "Tullio"]
-git-tree-sha1 = "d89e50bd102d3d0b63a65007f4c04fca488541b1"
-repo-rev = "mkitti-geometrybasics-ext"
+git-tree-sha1 = "6d8374b84961c7a56a3740f53ac80857e5f25f4b"
+repo-rev = "mkitti-geometrybasics-ext-perf"
 repo-url = "https://github.com/mkitti/ThinPlateSplines.jl"
 uuid = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 version = "0.2.1"

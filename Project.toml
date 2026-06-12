@@ -41,7 +41,7 @@ ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 
 [sources]
-ThinPlateSplines = {url = "https://github.com/mkitti/ThinPlateSplines.jl", rev = "mkitti-geometrybasics-ext"}
+ThinPlateSplines = {url = "https://github.com/mkitti/ThinPlateSplines.jl", rev = "mkitti-geometrybasics-ext-perf"}
 
 [compat]
 BSplineKit = "0.18, 0.19"

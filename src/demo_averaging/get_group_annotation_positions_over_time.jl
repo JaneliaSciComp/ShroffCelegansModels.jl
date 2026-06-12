@@ -35,7 +35,7 @@ function get_datasets_info(datasets)
     return datasets_info
 end
 
-function annotation_positions(smts_nt, annotation_dict, nt; avg_models::Vector{<: CelegansModel} = avg_models)
+function annotation_positions(smts_nt, annotation_dict, nt; avg_models::Vector{<: CelegansModel} = avg_models, ws=nothing)
     N_timepoints = length(avg_models) - 1
     _smodel = smts_nt(nt)
     idx = round(Int, nt * N_timepoints + 1)
@@ -50,7 +50,7 @@ function annotation_positions(smts_nt, annotation_dict, nt; avg_models::Vector{<
                 else
                     ann(nt)
                 end
-            end
+            end; ws
         ))
     catch err
         @error "A problem occured at $nt with avg_model[$idx]" exception = (err, Base.catch_backtrace())
@@ -107,8 +107,12 @@ function get_group_annotation_positions_over_time(
             cached
         else
             local positions = Vector{Vector{Point3{Float64}}}(undef, length(normalized_timepoints))
+            # One TPS workspace per dataset (= per @threads task ⇒ thread-local),
+            # reused across this dataset's timepoints so the ~tens-of-MB solve
+            # buffers aren't re-allocated ~371× here. Lazily sized on first solve.
+            local ws = Ref{Any}(nothing)
             for i in eachindex(normalized_timepoints)
-                positions[i] = annotation_positions(smts_nt, annotation_dict, normalized_timepoints[i]; avg_models)
+                positions[i] = annotation_positions(smts_nt, annotation_dict, normalized_timepoints[i]; avg_models, ws)
             end
             lock(cache_lock) do
                 cache[dataset.path] = positions
