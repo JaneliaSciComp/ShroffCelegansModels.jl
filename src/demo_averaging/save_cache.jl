@@ -15,13 +15,24 @@ if !@isdefined(annotations_cache)
     const annotations_cache = Dict{Tuple{String, UnitRange, Bool}, AnnotationsCacheValue}()
 end
 
+# Map a cache key's dataset path to its HDF5 group name. The path may arrive as
+# a Linux absolute path ("/nearline/shroff/.../RegB"), a Windows drive path
+# ("X:\\foo\\bar"), or the legacy backslash form ("nearline:\\shroff\\..."). All
+# are unified to a forward-slash, relative group path, so the SAME dataset always
+# maps to ONE nested group — never a flattened, separator-stripped name. The
+# inverse lives in load_annotations_cache / load_annotation_cache.
+function _cache_group_name(path::AbstractString)
+    parts = String.(split(replace(String(path), "\\" => "/"), "/"; keepempty = false))
+    isempty(parts) && return ""
+    parts[1] = replace(parts[1], ":" => "")   # drop drive/root colon: "nearline:" -> "nearline"
+    return join(parts, "/")
+end
+
 function save_annotation_cache(; filename = "my_annotation_position_cache.h5")
     # my_annotation_position_cache
     h5open(filename, "w") do h5f
         for (k,v) in my_annotation_position_cache
-            parts = splitpath(k)
-            parts[1] = replace(parts[1], ":" => "", "\\" => "")
-            group_name = join(parts, "/")
+            group_name = _cache_group_name(k)
             for (idx, points) in pairs(v)
                 _points = reinterpret(Float64, points)
                 _points = reshape(_points, 3, :)
@@ -40,9 +51,7 @@ function save_annotations_cache(
     h5open(filename, "w") do h5f
         for (k,v) in annotations_cache
             _path, _range, _my_untwist = k
-            parts = splitpath(_path)
-            parts[1] = replace(parts[1], ":" => "", "\\" => "")
-            group_name = join(parts, "/")
+            group_name = _cache_group_name(_path)
             h5g = create_group(h5f, group_name)
             attrs(h5g)["range_start"] = first(_range)
             attrs(h5g)["range_end"] = last(_range)
@@ -149,8 +158,19 @@ function load_annotations_cache(
             path_group = parent(path_group)
         end
 
-        _paths[1] = _paths[1] * ":"
-        _path = join(_paths, "\\")
+        # Reconstruct the canonical cache key path. A single-character root is a
+        # Windows drive letter (legacy Windows-built cache) — keep the "X:\\…"
+        # form so update_annotations_cache / alias_cache_unix can map it. Any
+        # longer root (e.g. "nearline", written by the Linux recompute pipeline)
+        # is already an absolute Linux path equal to dataset.path, so rebuild it
+        # as "/nearline/…" directly. The old code unconditionally backslash-joined
+        # with a ":" suffix, which never matched the live Linux-keyed cache and
+        # round-tripped into flattened, separator-stripped group names on save.
+        if length(_paths[1]) == 1
+            _path = joinpath(_paths[1] * ":\\", _paths[2:end]...)
+        else
+            _path = "/" * join(_paths, "/")
+        end
 
         data = d[]
         pt = Point3{Float64}(data)
@@ -186,7 +206,20 @@ function load_annotations_cache(
 
     @info "Loading annotations cache from $filename"
     h5open(filename, "r") do h5f
-        _descend(h5f)
+        for r in keys(h5f)
+            child = h5f[r]
+            # A root-level group carrying `range_start` directly is a legacy
+            # flattened leaf: the old save path stripped its path separators into
+            # the group name. Real datasets are nested several levels under a
+            # "nearline"/drive root, so skip these corrupt duplicates — the
+            # canonical copy lives in the nested tree, and a clean save (with the
+            # fixed group-naming) drops the flattened ones for good.
+            if isa(child, HDF5.Group) && haskey(attrs(child), "range_start")
+                @warn "Skipping flattened legacy annotations_cache group" group=r
+                continue
+            end
+            _descend(child)
+        end
     end
 
     # Reduce per-idx mtimes to a single dataset-level max (NaN if all missing).
