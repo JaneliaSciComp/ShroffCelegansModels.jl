@@ -23,3 +23,7 @@ test.h5
 backup/Manifest.toml
 backup/Project.toml
 *.csv
+
+# Local performance-assessment scratch + cloned dependency for dev (not committed)
+/bench/
+/ThinPlateSplines.jl/
