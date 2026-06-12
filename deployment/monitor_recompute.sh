@@ -28,14 +28,16 @@ else
   oc() { ( cd "$SCRIPT_DIR" && pixi run oc "$@" ); }
 fi
 
-# Default to the newest recompute-manual-* job.
+# Default to the newest recompute-* job (manual, cacheregen, or cron-spawned
+# recompute-on-mtime-change-*). Matching only "recompute-manual-" would silently
+# pick a stale completed manual run and report it as finished.
 if [[ -z "$JOB" ]]; then
   JOB="$(oc get jobs -n "$NS" \
           --sort-by=.metadata.creationTimestamp \
           -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
-        | grep '^recompute-manual-' | tail -1 || true)"
+        | grep '^recompute-' | tail -1 || true)"
   if [[ -z "$JOB" ]]; then
-    echo "No recompute-manual-* job found in namespace $NS." >&2
+    echo "No recompute-* job found in namespace $NS." >&2
     exit 1
   fi
   echo "No job specified — monitoring latest: $JOB"
