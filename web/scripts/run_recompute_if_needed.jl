@@ -68,6 +68,19 @@ function _generate_pipeline_visualizations(h5_path::AbstractString)
     open(joinpath(output_dir, "pipeline_status.json"), "w") do io
         JSON3.write(io, status)
     end
+
+    # The pipeline's 8c step already wrote index.html, but that ran *before*
+    # the movies/meshscatter HTML above were (re)generated, so the static
+    # /recompute/ listing captured the previous run's mtimes for those files.
+    # Regenerate it here, after the visualizations exist, so the page reflects
+    # the freshly-written movie/HTML mtimes.
+    try
+        ShroffCelegansModels._write_recompute_index(output_dir)
+        @info "Regenerated recompute index after visualizations" output_dir
+    catch err
+        @warn "Post-visualization index regeneration failed (outputs still valid)" err
+    end
+
     @info "Pipeline visualizations complete" export_path pipeline_run movie_created
 end
 
