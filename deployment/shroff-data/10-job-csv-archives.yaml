@@ -1,0 +1,63 @@
+# One-shot Job that gathers all per-dataset .csv files under /nearline
+# into per-dataset .tar.gz archives on the annotations PVC. Output is
+# served via nginx at /csv_archives/.
+#
+# Run via:
+#   oc apply -f deployment/shroff-data/10-job-csv-archives.yaml
+#
+# Re-running creates a new Job; the script itself skips datasets whose
+# archive already exists (set OVERWRITE=1 to force).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: gather-csv-archives-
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+    component: gather-csv-archives
+spec:
+  backoffLimit: 0
+  # ~2 hours; CSV scanning + tar.gz is I/O-bound, mostly /nearline reads.
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: shroff-data
+        component: gather-csv-archives
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: gather-csv-archives
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command:
+            - julia
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/gather_csv_archives.jl
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: CSV_ARCHIVE_DIR
+              value: /data/annotations/csv_archives
+            # Set OVERWRITE=1 to force re-archive datasets whose archive exists.
+            - name: OVERWRITE
+              value: "0"
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+            - name: annotations
+              mountPath: /data/annotations
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 250m
+            limits:
+              memory: 2Gi
+              cpu: "2"
+      volumes:
+        - name: nearline
+          persistentVolumeClaim:
+            claimName: shroff-data-nearline
+        - name: annotations
+          persistentVolumeClaim:
+            claimName: shroff-data-annotations

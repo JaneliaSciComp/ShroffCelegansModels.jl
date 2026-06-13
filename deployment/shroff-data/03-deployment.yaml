@@ -38,6 +38,14 @@ spec:
               readOnly: true
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
+            - name: annotations
+              mountPath: /var/www/recompute
+              subPath: recompute
+              readOnly: true
+            - name: annotations
+              mountPath: /var/www/csv_archives
+              subPath: csv_archives
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -60,6 +68,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_show_average_annotations.jl
           ports:
@@ -72,12 +81,20 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_annotation_cache reads the recompute
+            # my_annotation_position_cache.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 4Gi
               cpu: 250m
             limits:
-              memory: 4Gi
+              # loads avg_models_n*.h5 + my_annotation_position_cache.h5 +
+              # annotations_cache.h5 from the PVC (larger than the old bundled
+              # snapshots); 4Gi OOM-killed it, so allow headroom.
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -89,6 +106,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited.jl
           ports:
@@ -101,12 +119,19 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -118,6 +143,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited_2024_10_24.jl
           ports:
@@ -130,12 +156,19 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -147,6 +180,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis.jl
           ports:
@@ -158,6 +192,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:
@@ -176,6 +214,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_live.jl
           ports:
@@ -187,6 +226,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:
@@ -205,6 +248,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_debug_annotation_ap_axis_retrack_live.jl
           ports:
@@ -216,6 +260,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:
@@ -230,10 +278,34 @@ spec:
             failureThreshold: 10
             periodSeconds: 30
 
+        - name: debug-zscore
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+          command: ["sleep", "infinity"]
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data.int.janelia.org"
+            - name: ANNOTATION_CHANGES_PATH
+              value: /data/annotations/annotation_changes.h5
+          volumeMounts:
+            - name: nearline
+              mountPath: /nearline/shroff
+              readOnly: true
+            - name: annotations
+              mountPath: /data/annotations
+          resources:
+            requests:
+              memory: 4Gi
+              cpu: 250m
+            limits:
+              memory: 8Gi
+              cpu: "2"
+
         - name: zscore-analysis
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_zscore_analysis.jl
           ports:
@@ -267,6 +339,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_modified_times.jl
           ports:
@@ -298,6 +371,7 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
           command:
             - julia
+            - --threads=auto
             - --project=/app/ShroffCelegansModels.jl/web
             - /app/ShroffCelegansModels.jl/web/scripts/web_fix_annotation_ap_axis.jl
           ports:

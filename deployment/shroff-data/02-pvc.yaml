@@ -31,7 +31,11 @@ spec:
     readOnly: true
 ---
 ---
-# CephFS PVC for annotation_changes.h5 (user edits that must survive pod restarts).
+# CephFS PVC for annotation_changes.h5 (user edits) AND the recompute pipeline
+# output dir (/data/annotations/recompute: averaged HDF5s, caches, movies, the
+# interactive meshscatter_latest.html, archives). 20Gi matches the test env;
+# the recompute outputs + archives are ~300MB+ and grow per run. cephfs
+# allowVolumeExpansion=true, so this is an online resize.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -43,7 +47,7 @@ spec:
   storageClassName: ocs-storagecluster-cephfs
   resources:
     requests:
-      storage: 1Gi
+      storage: 20Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
