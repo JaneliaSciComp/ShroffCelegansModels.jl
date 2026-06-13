@@ -24,12 +24,19 @@ function generate_meshscatter_movie_gl(average_annotations_dict;
             view = view)
         time_points = time_slider.range[]
         time_slider.blockscene.visible[] = false
+        nframes = length(time_points)
+        frame = Ref(0)
         try
             # Record with update=false preserves the zoom set above;
             # the default update=true calls reset_limits! which resets the camera.
+            # Single-line per-frame progress so `… | grep 'movie frame' | tail -1`
+            # always shows the last frame written and which view it belongs to.
             vs = Record(fig, time_points; framerate, px_per_unit = 1, update = false) do t
                 set_close_to!(time_slider, t)
+                n = (frame[] += 1)
+                @info "movie frame  view=$view  frame=$n/$nframes  ($(round(Int, 100n/nframes))%)"
             end
+            @info "movie frames complete  view=$view  frames=$(frame[])/$nframes  → encoding+crop"
             save(raw_path, vs)
             crop_video(raw_path, output_path; framerate)
         finally

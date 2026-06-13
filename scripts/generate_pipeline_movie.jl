@@ -18,10 +18,17 @@ function generate_meshscatter_movie(average_annotations_dict;
             view)
         time_points = time_slider.range[]
         time_slider.blockscene.visible[] = false
+        nframes = length(time_points)
+        frame = Ref(0)
         try
+            # Single-line per-frame progress so `oc logs … | grep 'movie frame' | tail -1`
+            # always shows the last frame written and which view it belongs to.
             vs = Record(fig, time_points; framerate, px_per_unit=1, preset="fast", update=false) do t
                 set_close_to!(time_slider, t)
+                n = (frame[] += 1)
+                @info "movie frame  view=$view  frame=$n/$nframes  ($(round(Int, 100n/nframes))%)"
             end
+            @info "movie frames complete  view=$view  frames=$(frame[])/$nframes  → encoding+crop"
             save(raw_path, vs)
             crop_video(raw_path, output_path; framerate)
         finally
