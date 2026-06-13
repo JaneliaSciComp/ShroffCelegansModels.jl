@@ -6,7 +6,7 @@ using DataFrames
 using HDF5
 
 # include("get_group_annotation_positions_over_time.jl")
-using ShroffCelegansModels: CelegansModel, get_datasets_info, get_group_annotation_positions_over_time, annotation_positions
+using ShroffCelegansModels: CelegansModel, get_datasets_info, get_group_annotation_positions_over_time, annotation_positions, prime_dataset_positions!
 
 function average_annotations(
     datasets::Vector{ShroffCelegansModels.Datasets.NormalizedDataset};
@@ -63,14 +63,23 @@ function average_annotations(
     use_cell_key_annotations_only = true,
     checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )
-    # Shared progress state so every group's "step6 dataset done" line is
-    # numbered against the grand total of datasets across all groups, making
-    # overall progress estimable (otherwise each group restarts at 1/N).
-    grand_total = sum(length, values(datasets); init = 0)
-    progress_counter = Threads.Atomic{Int}(0)
+    if isa(timepoints, Integer)
+        timepoints = LinRange(0, 1, timepoints)
+    end
+
+    # Single flat, 16-wide pass over ALL datasets across ALL groups, filling the
+    # path-keyed `cache`. This is the parallel hot loop (previously the warp ran
+    # only ~3-wide per group); the per-group averaging below then runs entirely on
+    # cache hits. Numerically identical — the cache value IS the computed value.
+    grand_total = prime_dataset_positions!(datasets, cache, timepoints; avg_models, checkpoint_dir)
+
+    # The group loop now reads cache. Seed the counter at grand_total and pass it
+    # through: get_group sees a non-nothing counter ⇒ count_done=false ⇒ cache hits
+    # stay at @debug (no double-count). A genuine post-prime miss would log >grand_total.
+    progress_counter = Threads.Atomic{Int}(grand_total)
     group_keys = collect(keys(datasets))
     average_annotations_dict = Dict(group_keys .=> map(enumerate(group_keys)) do (gi, k)
-           @info "[6/8] Averaging group" group=k group_number=string(gi, "/", length(group_keys)) n_datasets=length(datasets[k]) datasets_done=progress_counter[] grand_total
+           @info "[6/8] Averaging group (cached)" group=k group_number=string(gi, "/", length(group_keys)) n_datasets=length(datasets[k]) grand_total
            average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only, checkpoint_dir, progress_counter, progress_total=grand_total)
     end)
     return average_annotations_dict
