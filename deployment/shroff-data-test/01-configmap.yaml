@@ -37,6 +37,11 @@ data:
             }
         }
 
+        # Redirect the bare paths to their trailing-slash form so the autoindex
+        # listing (and relative links within it) resolve correctly.
+        location = /recompute { return 301 /recompute/; }
+        location = /csv_archives { return 301 /csv_archives/; }
+
         location /recompute/ {
             alias /var/www/recompute/;
             autoindex on;
