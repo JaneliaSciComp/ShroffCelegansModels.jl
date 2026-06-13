@@ -15,10 +15,12 @@ function load_colors_dict_simple()
     return colors_dict
 end
 
-# Stripped-down meshscatter visualization: time slider only, no record/cosmetic
-# controls. Uses lift() so Observable updates are serializable to JavaScript for
-# Bonito.export_static and also work with CairoMakie headless recording.
-# Returns (fig, time_slider).
+# Stripped-down meshscatter visualization for MOVIE generation (CairoMakie/GLMakie):
+# time slider only, no record/cosmetic controls. Uses lift() so the Observable graph
+# updates under headless Record. Returns (fig, time_slider, ax). This file stays
+# Bonito-free so the glmakie project (no Bonito dep) can include it. The server-less
+# HTML static export does NOT use this builder — see export_meshscatter_static.jl,
+# which builds its own scene with a Bonito.Slider + client-side onjs animation.
 function meshscatter_average_simple(average_annotations_dict;
         xy_bounding_radius = -1,
         figure_size = (960, 300),
@@ -74,8 +76,11 @@ function meshscatter_average_simple(average_annotations_dict;
     scalebar_label_position = lift(scalebar) do pos
         first(pos)
     end
-    text!(ax, scalebar_label_position; text = scalebar_text, fontsize = _fontsize, align = (:left, :bottom))
-    lines!(ax, scalebar, color = :white, linewidth = 5)
+    # overdraw=true disables depth testing so the scalebar (data-space) text + line
+    # survive zoom under the orthographic camera (otherwise glyphs clip out — issue #4).
+    text!(ax, scalebar_label_position; text = scalebar_text, fontsize = _fontsize,
+        align = (:left, :bottom), overdraw = true)
+    lines!(ax, scalebar, color = :white, linewidth = 5, overdraw = true)
 
     alpha_obs = Observable(1.0)
 
