@@ -93,6 +93,23 @@ function get_group_annotation_positions_over_time(
     out = Vector{Vector{Dict{String, Point3{Float64}}}}(undef, length(datasets_info))
     cache_lock = ReentrantLock()
     prog = ProgressMeter.Progress(length(datasets_info); desc="Avg annotations / dataset...")
+    # Avoid BLAS-thread oversubscription inside this Threads.@threads region. The
+    # loop already parallelizes across all Julia threads, and each tps_solve! calls
+    # BLAS (bunchkaufman). If BLAS also multithreads we get nthreads × blas_threads
+    # contending for the same cores — on a 16-core pod we measured 16 Julia threads
+    # against a BLAS default of 50 (≈800 threads on a 16-core quota). Pin BLAS to 1
+    # for the region whenever Julia-thread parallelism is present, and restore it
+    # afterward. (With nthreads()==1 there is no Julia parallelism, so leave BLAS
+    # as-is — a serial run still benefits from BLAS threads.)
+    _prev_blas = LinearAlgebra.BLAS.get_num_threads()
+    _region_blas = Threads.nthreads() > 1 ? 1 : _prev_blas
+    LinearAlgebra.BLAS.set_num_threads(_region_blas)
+    @info("step6 BLAS threads scoped for @threads region",
+        julia_nthreads = Threads.nthreads(),
+        blas_in_region = _region_blas,
+        blas_prev = _prev_blas,
+    )
+    try
     Threads.@threads for ds_idx in eachindex(datasets_info)
         ds_t0 = time()
         dataset_info = datasets_info[ds_idx]
@@ -156,5 +173,8 @@ function get_group_annotation_positions_over_time(
         ProgressMeter.next!(prog)
     end
     ProgressMeter.finish!(prog)
+    finally
+        LinearAlgebra.BLAS.set_num_threads(_prev_blas)
+    end
     return out
 end

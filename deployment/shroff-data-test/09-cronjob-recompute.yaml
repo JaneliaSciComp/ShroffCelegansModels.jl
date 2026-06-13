@@ -44,7 +44,15 @@ spec:
               image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
               command:
                 - julia
-                - --threads=auto
+                # Explicit thread count — NOT --threads=auto. In this cgroup, auto
+                # mis-detects the CPU budget (observed: 1 thread on the old 4-core
+                # pod, 100 threads on a 16-core test pod — it reads the 128-core
+                # node, not the cgroup quota). Pin it to match the cpu limit below
+                # so the step-6 dataset loop (Threads.@threads over 72 datasets)
+                # actually parallelizes. BLAS is pinned to 1 inside that loop in
+                # code (get_group_annotation_positions_over_time.jl) to avoid
+                # nthreads × blas_threads oversubscription.
+                - --threads=16
                 - --project=/app/ShroffCelegansModels.jl/web
                 - /app/ShroffCelegansModels.jl/web/scripts/run_recompute_if_needed.jl
               workingDir: /app/ShroffCelegansModels.jl
@@ -62,13 +70,19 @@ spec:
                   readOnly: true
                 - name: annotations
                   mountPath: /data/annotations
+              # Burstable: guaranteed 4 cores, bursts to 16 when the node has them
+              # free (the step-6 averaging fans out over 72 independent datasets and
+              # scales ~linearly — a 16-thread CPU-bound test hit ~13.85× on this
+              # cluster). Memory raised for the 16 concurrent per-dataset working
+              # sets + per-thread TPS workspaces; the full positions cache (not the
+              # threading) dominates and fit in 8Gi single-threaded, so 32Gi is ample.
               resources:
                 requests:
-                  memory: 4Gi
-                  cpu: 500m
-                limits:
                   memory: 8Gi
                   cpu: "4"
+                limits:
+                  memory: 32Gi
+                  cpu: "16"
           volumes:
             - name: nearline
               persistentVolumeClaim:
