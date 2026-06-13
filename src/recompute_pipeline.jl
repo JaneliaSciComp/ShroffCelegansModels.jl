@@ -673,6 +673,70 @@ end
 const _PICO_CSS_LINK = "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css\">"
 const _SHROFF_CSS_LINK = "<link rel=\"stylesheet\" href=\"/style.css\">"
 
+const _VIDEO_SYNC_SCRIPT = """
+      <script>
+        (function () {
+          document.addEventListener('DOMContentLoaded', function () {
+            var videos = ['video-yz', 'video-xz'].map(function (id) {
+              return document.getElementById(id);
+            });
+            var readyCount = 0;
+            videos.forEach(function (v) { v._prog = false; });
+            videos.forEach(function (v) {
+              v.addEventListener('canplay', function onReady() {
+                v.removeEventListener('canplay', onReady);
+                if (++readyCount === videos.length) {
+                  videos.forEach(function (w) { w.play().catch(function () {}); });
+                }
+              });
+            });
+            videos.forEach(function (v) {
+              var peers = videos.filter(function (o) { return o !== v; });
+              function propagate(fn) {
+                if (v._prog) return;
+                peers.forEach(function (o) {
+                  o._prog = true; fn(o);
+                  setTimeout(function () { o._prog = false; }, 200);
+                });
+              }
+              v.addEventListener('play', function () {
+                propagate(function (o) { o.currentTime = v.currentTime; o.play().catch(function () {}); });
+              });
+              v.addEventListener('pause', function () {
+                propagate(function (o) { o.pause(); o.currentTime = v.currentTime; });
+              });
+              v.addEventListener('seeked', function () {
+                propagate(function (o) { o.currentTime = v.currentTime; });
+              });
+            });
+          });
+        })();
+      </script>"""
+
+function _video_section(filenames::Vector)
+    has_yz = any(f -> f.name == "movie_yz.mp4", filenames)
+    has_xz = any(f -> f.name == "movie_xz.mp4", filenames)
+    (has_yz || has_xz) || return ""
+    parts = String[]
+    push!(parts, "\n      <h2>Meshscatter Movies (48 fps)</h2>")
+    has_yz && push!(parts, """
+      <figure>
+        <figcaption>YZ view (side)</figcaption>
+        <video id="video-yz" controls loop muted width="100%" src="movie_yz.mp4">
+          <a href="movie_yz.mp4">Download YZ movie</a>
+        </video>
+      </figure>""")
+    has_xz && push!(parts, """
+      <figure>
+        <figcaption>XZ view (top-down)</figcaption>
+        <video id="video-xz" controls loop muted width="100%" src="movie_xz.mp4">
+          <a href="movie_xz.mp4">Download XZ movie</a>
+        </video>
+      </figure>""")
+    (has_yz && has_xz) && push!(parts, _VIDEO_SYNC_SCRIPT)
+    return join(parts, "\n")
+end
+
 function _human_size(n::Integer)
     n < 1024 && return string(n, " B")
     n < 1024^2 && return string(round(n / 1024; digits=1), " KB")
@@ -725,6 +789,7 @@ function _render_index_html(;
               $(items)
             </ul>"""
     end
+    video_section = _video_section(files)
     generated_at = _format_mtime(Float64(time()))
     title_esc = _html_escape(title)
     intro_esc = _html_escape(intro)
@@ -749,7 +814,7 @@ function _render_index_html(;
         <tbody>
             $(rows)
         </tbody>
-      </table>$(subdir_section)
+      </table>$(video_section)$(subdir_section)
     </main>
   </body>
 </html>
