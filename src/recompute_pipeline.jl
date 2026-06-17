@@ -284,6 +284,10 @@ function run_recompute_pipeline(;
                     avg_models = avg_models,
                     ben_csv_path = ben_csv,
                     date_str = ts,
+                    # Seam cells already arrive (smoothed) via the `seam_cells`
+                    # group in `_for_ben.csv`; don't re-append the unsmoothed
+                    # avg_models copies, which would double-count them.
+                    add_unsmoothed_seam_cells = false,
                 )
                 @info "[8a/8] Wrote explicit pretwitch/posttwitch/combined CSVs" res.pretwitch_path res.posttwitch_path res.combined_path
                 return (; res.pretwitch_path, res.posttwitch_path, res.combined_path)
