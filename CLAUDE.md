@@ -146,6 +146,7 @@ that are too detailed for CLAUDE.md. It is excluded from Docker builds
 (`.dockerignore`) but committed to git so notes are available on any checkout.
 
 Current notes:
+- `notes/trigger-recompute-pipeline.md` — how to manually trigger the recompute pipeline (plant marker + create Job from CronJob)
 - `notes/copy-movies-to-pvc.md` — how to manually copy MP4 movies to the OpenShift PVC
 - `notes/lsf-from-mac.md` — submitting and monitoring LSF jobs from a Mac via SSH
 - `notes/2026-06-09-recompute-seam-cells.md` — recompute run log (seam-cell injection)
