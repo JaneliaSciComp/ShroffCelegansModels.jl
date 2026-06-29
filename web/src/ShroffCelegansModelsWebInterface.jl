@@ -15,6 +15,19 @@ corresponding submodule's `main()`.
 """
 module ShroffCelegansModelsWebInterface
 
+# Shared render-primitive workload (helps the launch-script apps, whose own code
+# can't run at build time).
+include("CommonScenes.jl")
+
+# One submodule per web app. MeshscatterAverage must come before its 2024 variant.
 include("apps/MeshscatterAverage.jl")
+include("apps/MeshscatterAverage2024.jl")
+include("apps/ModifiedTimes.jl")
+include("apps/ZscoreAnalysis.jl")
+include("apps/ShowAverageAnnotations.jl")
+include("apps/DebugApAxis.jl")
+include("apps/DebugApAxisLive.jl")
+include("apps/DebugApAxisRetrackLive.jl")
+include("apps/FixApAxis.jl")
 
 end # module ShroffCelegansModelsWebInterface

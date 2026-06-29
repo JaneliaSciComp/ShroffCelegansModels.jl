@@ -49,23 +49,25 @@ function build_apps(average_annotation_dict)
 end
 
 "Construct (but do not block on) the Bonito `Server` for this app."
-function webapp(average_annotation_dict)
+function webapp(average_annotation_dict; port = PORT, proxy_path = PROXY_PATH)
     app, nerve_ring_app = build_apps(average_annotation_dict)
-    server = Server(app, "0.0.0.0", PORT;
-        proxy_url = "https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/$PROXY_PATH/")
+    server = Server(app, "0.0.0.0", port;
+        proxy_url = "https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/$proxy_path/")
     route!(server, "/nerve_ring" => nerve_ring_app)
     return server
 end
 
-"Container entry point (called from `web/scripts/web_meshscatter_average_edited.jl`)."
-function main()
+# Container entry point. Parameterized so the 2024-10-24 variant
+# (MeshscatterAverage2024) can reuse the identical render/server logic — and the
+# already-cached render specializations — with a different data file/port/proxy.
+function main(; default_filename = DEFAULT_FILENAME, port = PORT, proxy_path = PROXY_PATH)
     @info "Loading annotation cache"
     load_annotation_cache()
     @info "Activating WGLMakie"
     WGLMakie.activate!(; resize_to = :body)
     @info "Launching server!"
-    average_annotation_dict = load_latest_average_annotations(default_filename = DEFAULT_FILENAME)
-    server = webapp(average_annotation_dict)
+    average_annotation_dict = load_latest_average_annotations(; default_filename)
+    server = webapp(average_annotation_dict; port, proxy_path)
     if isinteractive()
         println("Press enter to quit")
         readline()

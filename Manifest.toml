@@ -1587,7 +1587,7 @@ uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
 version = "1.0.0-DEV"
 
 [[deps.ShroffCelegansModelsWebInterface]]
-deps = ["Base64", "Bonito", "CairoMakie", "ColorTypes", "DataFrames", "GeometryBasics", "HDF5", "HTTP", "Makie", "MbedTLS", "OpenSSL", "PrecompileTools", "Preferences", "Printf", "Revise", "ShroffCelegansModels", "ThinPlateSplines", "URIs", "VideoIO", "WGLMakie"]
+deps = ["Base64", "Bonito", "CairoMakie", "ColorTypes", "DataFrames", "Dates", "GeometryBasics", "HDF5", "HTTP", "Makie", "MbedTLS", "OpenSSL", "PrecompileTools", "Preferences", "Printf", "Revise", "ShroffCelegansModels", "ThinPlateSplines", "URIs", "VideoIO", "WGLMakie"]
 path = "web"
 uuid = "dcb3a74b-ea76-41f5-b606-4c6e28c38160"
 version = "0.1.0"
