@@ -1,8 +1,12 @@
 """
 Functions that produce the "explicit" pretwitch + posttwitch dataframes
 shared with collaborators — columns are
-(lineage_name, minutes_post_first_cleavage, LR_micrometers,
-DV_micrometers, AP_micrometers).
+(lineage_name, minutes_post_first_cleavage, RL_micrometers,
+VD_micrometers, AP_micrometers).
+
+The RL/VD axes are the flipped LR/DV axes: RL = -LR and VD = -DV (a 180°
+rotation about the AP axis), kept consistent with the display/movie flip
+in `load_average_annotations`.
 
 Pretwitch coordinates are taken from `ryan_data/final_20251205_pre-twitch_coords.csv`
 via `get_pretwitch_explicit_df` (defined in `src/seam_cell_to_lineage_map.jl`).
@@ -45,11 +49,12 @@ function get_seam_cells_explicit_df(
     dfs = map(enumerate(avg_models)) do (i, model)
         pts = seam_cell_pts(model, 2)
         pts = swapyz_scale.(pts)
+        # Axes flipped: RL = -LR (-x), VD = -DV (-z); AP (y) unchanged.
         DataFrame(
             lineage_name = seam_cell_lineage_names,
             minutes_post_first_cleavage = (i - 1) * 370 / (length(avg_models) - 1) + 381,
-            LR_micrometers = pts .|> x -> x[1],
-            DV_micrometers = pts .|> x -> x[3],
+            RL_micrometers = pts .|> x -> -x[1],
+            VD_micrometers = pts .|> x -> -x[3],
             AP_micrometers = pts .|> x -> x[2],
         )
     end
@@ -92,11 +97,12 @@ function get_combined_explicit_df(;
     )
 
     ben_df = CSV.read(ben_csv_path, DataFrame)
+    # Axes flipped: RL = -LR (-x), VD = -DV (-z); AP (y) unchanged.
     posttwitch_for_ben_explicit_df = select(ben_df,
         :cell => ByRow(cell -> get(positional_to_lineage_dict, cell, missing)) => :lineage_name,
         :time => :minutes_post_first_cleavage,
-        :x => :LR_micrometers,
-        :z => :DV_micrometers,
+        :x => ByRow(-) => :RL_micrometers,
+        :z => ByRow(-) => :VD_micrometers,
         :y => :AP_micrometers,
     )
     if add_unsmoothed_seam_cells

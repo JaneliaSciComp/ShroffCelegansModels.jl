@@ -25,7 +25,8 @@ function meshscatter_average_simple(average_annotations_dict;
         xy_bounding_radius = -1,
         figure_size = (960, 300),
         show_legend = true,
-        view = :yz)
+        view = :yz,
+        frame_mpfc = nothing)
     fig = Figure(size = figure_size)
     ax = LScene(fig[1, 1]; show_axis = false)
     coordinates = values(average_annotations_dict)
@@ -45,10 +46,17 @@ function meshscatter_average_simple(average_annotations_dict;
     # Layout: LScene → fig[1,1], Legend → overlaid on fig[1,1], Slider → fig[2,1].
     time_slider = Makie.Slider(fig[2, 1], range = time_points, startvalue = last(time_points))
 
-    # HPF label
+    # HPF label. By default the frame index maps linearly to the posttwitch
+    # hpf window. When `frame_mpfc` is supplied (combined pre+post movie) it
+    # gives the minutes-post-first-cleavage for each frame directly; hpf is
+    # then just mpfc rendered as hours:minutes (360 mpfc = 6:00 hpf).
     time_text = lift(time_slider.value) do t
-        total_minutes = (t - 1 + 21) / (length(time_points) - 1) * 370
-        hours = 6 + round(Int, total_minutes / 60, RoundDown)
+        total_minutes = if isnothing(frame_mpfc)
+            (t - 1 + 21) / (length(time_points) - 1) * 370 + 360
+        else
+            frame_mpfc[t]
+        end
+        hours = round(Int, total_minutes / 60, RoundDown)
         minutes = round(Int, mod(total_minutes, 60), RoundDown)
         "hpf = $hours:$(@sprintf("%02d", minutes))"
     end

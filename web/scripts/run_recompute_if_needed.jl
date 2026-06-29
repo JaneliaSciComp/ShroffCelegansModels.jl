@@ -22,6 +22,7 @@ using ShroffCelegansModels.JSON3
 const _scripts_dir = joinpath(@__DIR__, "..", "..", "scripts")
 include(joinpath(_scripts_dir, "export_meshscatter_static.jl"))
 include(joinpath(_scripts_dir, "generate_pipeline_movie.jl"))
+include(joinpath(_scripts_dir, "combined_meshscatter_movie.jl"))
 
 const MARKER_NAME = "pending_recompute"
 
@@ -61,6 +62,19 @@ function _generate_pipeline_visualizations(h5_path::AbstractString)
         movie_path = joinpath(output_dir, "movie_$(view).mp4")
         generate_meshscatter_movie(avg_dict; output_path = movie_path, view)
         @info "Movie written" view movie_path
+    end
+
+    # Combined pre-twitch + post-twitch movie (spans mpfc 20→751) in the same
+    # meshscatter style. Pre-twitch frames are prepended and aligned to the
+    # post-twitch H2 seam-cell midpoint; see combined_meshscatter_movie.jl.
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "combined_movie_$(view).mp4")
+        try
+            generate_combined_meshscatter_movie(avg_dict; output_path = movie_path, view)
+            @info "Combined movie written" view movie_path
+        catch err
+            @warn "Combined movie generation failed (other outputs still valid)" view err
+        end
     end
 
     movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
