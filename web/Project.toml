@@ -1,3 +1,8 @@
+name = "ShroffCelegansModelsWebInterface"
+uuid = "dcb3a74b-ea76-41f5-b606-4c6e28c38160"
+authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
+version = "0.1.0"
+
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
@@ -10,6 +15,9 @@ HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 MbedTLS = "739be429-bea8-5141-9913-cc70e7f3736d"
 OpenSSL = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 ShroffCelegansModels = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
 ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"

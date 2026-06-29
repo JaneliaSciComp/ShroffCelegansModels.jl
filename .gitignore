@@ -24,6 +24,10 @@ backup/Manifest.toml
 backup/Project.toml
 *.csv
 
+# Preferences are local build/dev overrides (e.g. precompile_workload=false for
+# fast iteration); production relies on the in-code defaults, so never commit them.
+LocalPreferences.toml
+
 # Local performance-assessment scratch + cloned dependency for dev (not committed)
 /bench/
 /ThinPlateSplines.jl/
