@@ -147,6 +147,7 @@ that are too detailed for CLAUDE.md. It is excluded from Docker builds
 
 Current notes:
 - `notes/trigger-recompute-pipeline.md` — how to manually trigger the recompute pipeline (plant marker + create Job from CronJob)
+- `notes/regenerate-viz-only.md` — regenerate display/export artifacts only (movies, HTML, CSVs, index) from the existing averaged HDF5, without re-averaging (`web/scripts/regenerate_viz_only.jl` + suspended `regenerate-viz` CronJob)
 - `notes/copy-movies-to-pvc.md` — how to manually copy MP4 movies to the OpenShift PVC
 - `notes/lsf-from-mac.md` — submitting and monitoring LSF jobs from a Mac via SSH
 - `notes/2026-06-09-recompute-seam-cells.md` — recompute run log (seam-cell injection)
