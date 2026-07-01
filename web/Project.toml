@@ -1,7 +1,7 @@
 name = "ShroffCelegansModelsWebInterface"
 uuid = "dcb3a74b-ea76-41f5-b606-4c6e28c38160"
-authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 version = "0.1.0"
+authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
@@ -13,9 +13,12 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 MbedTLS = "739be429-bea8-5141-9913-cc70e7f3736d"
 OpenSSL = "4d8831e6-92b7-49fb-bdf8-b643e874388c"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
@@ -25,3 +28,8 @@ ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 VideoIO = "d6d074c3-1acf-5d4c-9a43-ef38773959a2"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+
+[compat]
+InteractiveUtils = "1.11.0"
+LinearAlgebra = "1.12.0"
+Pkg = "1.12.1"
