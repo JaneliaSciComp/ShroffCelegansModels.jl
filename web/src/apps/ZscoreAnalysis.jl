@@ -37,38 +37,43 @@ function main(; apply_changes::Bool = true)
     Base.include(@__MODULE__, joinpath(scripts, "launch_show_average_annotations.jl"))
     Base.include(@__MODULE__, joinpath(pkgdir(ShroffCelegansModels), "src", "demo_averaging", "zscore_analysis.jl"))
 
-    @info "Activating WGLMakie"
-    WGLMakie.activate!(; resize_to = :body)
-    @info "Priming annotation caches"
-    ShroffCelegansModels.prime_annotation_caches()
-    alias_cache_unix("/nearline/shroff/")
-    for group in values(datasets)
-        for dataset in values(group)
-            try
-                ShroffCelegansModels.load_straightened_annotations_over_time(dataset; use_myuntwist = true)
-            catch err
-                @warn "Cache prime failed for dataset" path = dataset.path err
+    # The runtime includes define `alias_cache_unix`, `datasets`,
+    # `raw_zscore_analysis`, … at a newer world age than this precompiled `main`
+    # can see, so run the rest via `invokelatest`.
+    Base.invokelatest() do
+        @info "Activating WGLMakie"
+        WGLMakie.activate!(; resize_to = :body)
+        @info "Priming annotation caches"
+        ShroffCelegansModels.prime_annotation_caches()
+        alias_cache_unix("/nearline/shroff/")
+        for group in values(datasets)
+            for dataset in values(group)
+                try
+                    ShroffCelegansModels.load_straightened_annotations_over_time(dataset; use_myuntwist = true)
+                catch err
+                    @warn "Cache prime failed for dataset" path = dataset.path err
+                end
             end
         end
-    end
-    if apply_changes
-        @info "Loading annotation changes"
-        annotation_changes = ShroffCelegansModels.load_annotation_changes_cache()
-        ShroffCelegansModels.update_annotations_cache(ShroffCelegansModels.annotations_cache, annotation_changes)
-        @info "Loaded annotation changes"
-    else
-        @info "Skipping annotation changes (apply_changes = false); scoring primed cache only"
-    end
+        if apply_changes
+            @info "Loading annotation changes"
+            annotation_changes = ShroffCelegansModels.load_annotation_changes_cache()
+            ShroffCelegansModels.update_annotations_cache(ShroffCelegansModels.annotations_cache, annotation_changes)
+            @info "Loaded annotation changes"
+        else
+            @info "Skipping annotation changes (apply_changes = false); scoring primed cache only"
+        end
 
-    server = Server("0.0.0.0", PORT;
-        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/zscore_analysis/")
-    route!(server, "/" => build_table_app())
-    @info "Listening" port=PORT
-    if isinteractive()
-        println("Press enter to quit")
-        readline()
-    else
-        wait(server)
+        server = Server("0.0.0.0", PORT;
+            proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/zscore_analysis/")
+        route!(server, "/" => build_table_app())
+        @info "Listening" port=PORT
+        if isinteractive()
+            println("Press enter to quit")
+            readline()
+        else
+            wait(server)
+        end
     end
 end
 

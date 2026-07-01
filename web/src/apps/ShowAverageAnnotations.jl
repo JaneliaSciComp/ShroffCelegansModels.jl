@@ -50,17 +50,24 @@ end
 function main()
     @info "Loading data (runtime include)"
     _include_launch()
-    @info "Priming annotation cache"
-    Launch.prime_annotation_caches()
-    Launch.alias_cache_unix("/nearline/shroff/")
-    WGLMakie.activate!(; resize_to = :body)
-    @info "Launching server!" port=PORT
-    server = build_server()
-    if isinteractive()
-        println("Press enter to quit")
-        readline()
-    else
-        wait(server)
+    # The runtime include defines methods/globals (alias_cache_unix,
+    # Launch.datasets, Launch.show_average_annotations, …) at a newer world age
+    # than this precompiled `main` can see, so run the rest via `invokelatest`.
+    # `prime_annotation_caches` is a `using`-import in the launch script (not
+    # reachable as `Launch.prime_annotation_caches`), so call it on the package.
+    Base.invokelatest() do
+        @info "Priming annotation cache"
+        ShroffCelegansModels.prime_annotation_caches()
+        Launch.alias_cache_unix("/nearline/shroff/")
+        WGLMakie.activate!(; resize_to = :body)
+        @info "Launching server!" port=PORT
+        server = build_server()
+        if isinteractive()
+            println("Press enter to quit")
+            readline()
+        else
+            wait(server)
+        end
     end
 end
 

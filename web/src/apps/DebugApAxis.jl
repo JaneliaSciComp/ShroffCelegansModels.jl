@@ -51,14 +51,19 @@ end
 function main()
     @info "Loading data (runtime include)"
     _include_launch()
-    WGLMakie.activate!(; resize_to = :body)
-    @info "Launching server!" port=PORT
-    server = build_server()
-    if isinteractive()
-        println("Press enter to quit")
-        readline()
-    else
-        wait(server)
+    # The runtime include defines Launch.datasets / Launch.debug_annotation_ap_axis
+    # etc. at a newer world age than this precompiled `main` can see, so run the
+    # rest via `invokelatest`.
+    Base.invokelatest() do
+        WGLMakie.activate!(; resize_to = :body)
+        @info "Launching server!" port=PORT
+        server = build_server()
+        if isinteractive()
+            println("Press enter to quit")
+            readline()
+        else
+            wait(server)
+        end
     end
 end
 

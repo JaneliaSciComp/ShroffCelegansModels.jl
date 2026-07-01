@@ -51,7 +51,11 @@ function build_server()
                 empty!(ShroffCelegansModels.annotations_cache)
                 params = HTTP.URIs.queryparams(URI(request.target).query)
                 listener = (a, v) -> evaljs(session, js"""history.replaceState(null, "", "?annotation=" + $a + "&timepoint=$v");""")
-                return Launch.fix_annotation_ap_axis(
+                # `fix_annotation_ap_axis` is a `using`-import in the launch
+                # script, so it is not reachable as `Launch.fix_annotation_ap_axis`;
+                # call it on the package directly (`Launch.avg_models` is a
+                # launch-defined binding and stays as-is).
+                return ShroffCelegansModels.fix_annotation_ap_axis(
                     Launch.avg_models,
                     datasets[k][i];
                     use_myuntwist=true,
@@ -68,18 +72,22 @@ end
 function main()
     @info "Loading data (runtime include)"
     _include_launch()
-    # Bind the persist listener synchronously so a bind failure surfaces here
-    # instead of being swallowed by the spawned accept loop.
-    persist_listener = ShroffCelegansModels.fix_annotation_ap_axis_persist_listen()
-    Threads.@spawn ShroffCelegansModels.fix_annotation_ap_axis_persist_server(persist_listener)
-    WGLMakie.activate!(; resize_to = :body)
-    @info "Launching server!" port=PORT
-    server = build_server()
-    if isinteractive()
-        println("Press enter to quit")
-        readline()
-    else
-        wait(server)
+    # The runtime include defines Launch globals at a newer world age than this
+    # precompiled `main` can see, so run the rest via `invokelatest`.
+    Base.invokelatest() do
+        # Bind the persist listener synchronously so a bind failure surfaces here
+        # instead of being swallowed by the spawned accept loop.
+        persist_listener = ShroffCelegansModels.fix_annotation_ap_axis_persist_listen()
+        Threads.@spawn ShroffCelegansModels.fix_annotation_ap_axis_persist_server(persist_listener)
+        WGLMakie.activate!(; resize_to = :body)
+        @info "Launching server!" port=PORT
+        server = build_server()
+        if isinteractive()
+            println("Press enter to quit")
+            readline()
+        else
+            wait(server)
+        end
     end
 end
 
