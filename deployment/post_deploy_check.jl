@@ -118,33 +118,43 @@ function poll_until_ready(; base, verify,
         timeout  = parse(Float64, get(ENV, "SHROFF_CHECK_POLL_TIMEOUT", "300")))
     width = maximum(length(first(e)) for e in ENDPOINTS)
     t0 = time()
-    ready = Dict{String,Float64}()      # label => seconds-to-first-healthy
-    done  = Set{String}()
     println("  clock starts now (run right after `oc rollout restart`); ",
-            "interval=$(interval)s timeout=$(timeout)s\n")
-    while length(done) < length(ENDPOINTS) && (time() - t0) < timeout
-        for (label, path) in ENDPOINTS
-            label in done && continue
-            status, body, _, _ = probe(base * path; verify)
-            marker = body === nothing ? nothing : error_marker(body)
-            if is_healthy(status, marker)
-                el = time() - t0
-                ready[label] = el
-                push!(done, label)
-                println(@sprintf("  READY  %7.1fs  %s", el, label))
+            "interval=$(interval)s timeout=$(timeout)s")
+    println("  `from-start` = seconds since clock start until this endpoint first",
+            " served OK;")
+    println("  `render` = that endpoint's own first successful request time (the",
+            " first-render cost)\n")
+    # One INDEPENDENT poller task per endpoint so a slow one (e.g. a heavy
+    # per-dataset render) never delays another's measurement. Each records its
+    # own time-to-first-healthy and the latency of that first successful request.
+    tasks = map(ENDPOINTS) do (label, path)
+        @async begin
+            while (time() - t0) < timeout
+                status, body, _, elapsed = probe(base * path; verify)
+                marker = body === nothing ? nothing : error_marker(body)
+                if is_healthy(status, marker)
+                    fs = time() - t0
+                    println(@sprintf("  READY  %7.1fs (render %5.1fs)  %s", fs, something(elapsed, NaN), label))
+                    return (from_start = fs, req = something(elapsed, NaN), ok = true)
+                end
+                sleep(interval)
             end
+            println("  TIMEOUT  $label")
+            return (from_start = time() - t0, req = NaN, ok = false)
         end
-        length(done) < length(ENDPOINTS) && sleep(interval)
     end
+    results = Dict(first(e) => fetch(t) for (e, t) in zip(ENDPOINTS, tasks))
 
-    println("\n  Cold-start time-to-first-healthy (seconds from clock start):")
+    println("\n  Cold-start per app  (from-start / render):")
     for (label, _) in ENDPOINTS
-        if haskey(ready, label)
-            println(@sprintf("    %7.1fs  %s", ready[label], rpad(label, width)))
+        r = results[label]
+        if r.ok
+            println(@sprintf("    %7.1fs / %5.1fs  %s", r.from_start, r.req, rpad(label, width)))
         else
-            println("    TIMEOUT   $(rpad(label, width))  (> $(round(Int, timeout))s)")
+            println("    TIMEOUT           $(rpad(label, width))  (> $(round(Int, timeout))s)")
         end
     end
+    done = Set(l for (l, _) in ENDPOINTS if results[l].ok)
     timed_out = length(ENDPOINTS) - length(done)
     println()
     println(timed_out == 0 ?
