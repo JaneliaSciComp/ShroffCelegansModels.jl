@@ -4,9 +4,12 @@ shared with collaborators — columns are
 (lineage_name, minutes_post_first_cleavage, RL_micrometers,
 VD_micrometers, AP_micrometers).
 
-The RL/VD axes are the flipped LR/DV axes: RL = -LR and VD = -DV (a 180°
-rotation about the AP axis), kept consistent with the display/movie flip
-in `load_average_annotations`.
+The RL axis is the flipped LR axis (RL = -LR), kept consistent with the
+display/movie flip in `load_average_annotations`. The VD axis is **not**
+negated for post-twitch data: the raw HDF5/`_for_ben` `z` is already in
+the correct VD orientation. (Pre-twitch coords still need a DV flip; see
+`get_pretwitch_explicit_df`.) Both phases emit the same `VD` column name
+so the pre/post dataframes concatenate cleanly.
 
 Pretwitch coordinates are taken from `ryan_data/final_20251205_pre-twitch_coords.csv`
 via `get_pretwitch_explicit_df` (defined in `src/seam_cell_to_lineage_map.jl`).
@@ -49,12 +52,13 @@ function get_seam_cells_explicit_df(
     dfs = map(enumerate(avg_models)) do (i, model)
         pts = seam_cell_pts(model, 2)
         pts = swapyz_scale.(pts)
-        # Axes flipped: RL = -LR (-x), VD = -DV (-z); AP (y) unchanged.
+        # LR flipped: RL = -LR (-x). VD = +z (post-twitch z already in VD
+        # orientation, not negated). AP (y) unchanged.
         DataFrame(
             lineage_name = seam_cell_lineage_names,
             minutes_post_first_cleavage = (i - 1) * 370 / (length(avg_models) - 1) + 381,
             RL_micrometers = pts .|> x -> -x[1],
-            VD_micrometers = pts .|> x -> -x[3],
+            VD_micrometers = pts .|> x -> x[3],
             AP_micrometers = pts .|> x -> x[2],
         )
     end
@@ -97,12 +101,13 @@ function get_combined_explicit_df(;
     )
 
     ben_df = CSV.read(ben_csv_path, DataFrame)
-    # Axes flipped: RL = -LR (-x), VD = -DV (-z); AP (y) unchanged.
+    # LR flipped: RL = -LR (-x). VD = +z (post-twitch z already in VD
+    # orientation, not negated). AP (y) unchanged.
     posttwitch_for_ben_explicit_df = select(ben_df,
         :cell => ByRow(cell -> get(positional_to_lineage_dict, cell, missing)) => :lineage_name,
         :time => :minutes_post_first_cleavage,
         :x => ByRow(-) => :RL_micrometers,
-        :z => ByRow(-) => :VD_micrometers,
+        :z => :VD_micrometers,
         :y => :AP_micrometers,
     )
     if add_unsmoothed_seam_cells
