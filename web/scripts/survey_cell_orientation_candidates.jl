@@ -33,7 +33,7 @@ Job) rather than on a schedule.
 
 using Statistics: median
 using ShroffCelegansModels
-using ShroffCelegansModels: read_config_json, dataset_cell_orientation_survey
+using ShroffCelegansModels: read_config_json, dataset_cell_orientation_survey, NormalizedDataset
 
 mutable struct CellAgg
     dv_signs::Vector{Float64}
@@ -57,7 +57,7 @@ end
 
 robust_median(xs) = (valid = filter(!isnan, xs); isempty(valid) ? NaN : median(valid))
 
-function survey_all(datasets::AbstractDict)
+function survey_all(datasets::Dict{String, Vector{NormalizedDataset}})
     agg = Dict{String, CellAgg}()
     for (group, group_datasets) in datasets
         for (idx, ds) in enumerate(group_datasets)
