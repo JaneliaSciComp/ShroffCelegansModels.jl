@@ -140,9 +140,21 @@ end
 # Timepoints where the model can't be built or the annotations file can't be
 # read are skipped entirely (not NaN-filled), since they contribute no cell
 # names at all; a cell simply has fewer observations for that dataset.
+#
+# The annotations-CSV `name` column is frequently a MIPAV positional/tracking
+# placeholder (e.g. "C10", "C2") rather than a stable identity — the same
+# placeholder resolves to entirely different cells in different datasets
+# (confirmed on real data: "C10" maps to 4 unrelated cells, "C2" to 11).
+# `resolve_cpaaaa_key` already handles this one-cell-at-a-time via
+# `cell_key.mapping`; here every raw name is resolved to its canonical
+# display name (falling back to the raw name itself when it has no mapping
+# entry, i.e. the CSV already stored a stable name directly) before
+# accumulating, so cross-dataset aggregation groups the same real cell
+# together instead of colliding unrelated cells under the same placeholder.
 function dataset_cell_orientation_survey(dataset::NormalizedDataset)
     mts = ModelTimeSeries(dataset)
     n = length(range(dataset.cell_key))
+    mapping = dataset.cell_key.mapping
     result = Dict{String, Vector{typeof(NAN_AXES)}}()
     for i in 1:n
         try
@@ -151,8 +163,9 @@ function dataset_cell_orientation_survey(dataset::NormalizedDataset)
             dict = twisted_annotations(dataset, i)
             ismissing(dict) && continue
             per_cell = lattice_orientation_axes_all(model, dict)
-            for (name, ax) in per_cell
-                push!(get!(() -> typeof(NAN_AXES)[], result, name), ax)
+            for (raw_name, ax) in per_cell
+                canonical = get(mapping, Symbol(raw_name), raw_name)
+                push!(get!(() -> typeof(NAN_AXES)[], result, canonical), ax)
             end
         catch
         end
