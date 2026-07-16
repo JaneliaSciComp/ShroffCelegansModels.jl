@@ -57,7 +57,7 @@ end
 
 robust_median(xs) = (valid = filter(!isnan, xs); isempty(valid) ? NaN : median(valid))
 
-function survey_all(datasets::Dict{String, Vector})
+function survey_all(datasets::AbstractDict)
     agg = Dict{String, CellAgg}()
     for (group, group_datasets) in datasets
         for (idx, ds) in enumerate(group_datasets)
