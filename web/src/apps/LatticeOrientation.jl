@@ -103,7 +103,12 @@ const HIGHLIGHT_CLASS = "shroff-highlight"
 
 function render_summary(reference_sign::Float64, groups::Dict{String, Vector{DatasetOrientation}}, source_mtime::Float64)
     all_entries = collect(Iterators.flatten(values(groups)))
-    mismatched = count(d -> !d.matches_reference, all_entries)
+    # A dataset with no resolvable Cpaaaa annotation (`representative_sign`
+    # is NaN) has nothing to check — it isn't a swap failure, just missing
+    # data, so it must not be lumped in with real disagreements.
+    no_data = count(d -> isnan(d.representative_sign), all_entries)
+    checkable = length(all_entries) - no_data
+    disagree = count(d -> !isnan(d.representative_sign) && !d.matches_reference, all_entries)
     total_mismatched_timepoints = sum(d -> d.mismatched_timepoint_count, all_entries; init=0)
     DOM.main(
         theme_assets()...,
@@ -114,8 +119,10 @@ function render_summary(reference_sign::Float64, groups::Dict{String, Vector{Dat
         ),
         DOM.p(
             "Reference (dorsal) sign: ", DOM.strong(format_sign(reference_sign)),
-            " — ", string(length(all_entries) - mismatched), "/", string(length(all_entries)),
-            " datasets agree; ", string(total_mismatched_timepoints),
+            " — ", string(checkable - disagree), "/", string(checkable),
+            " datasets with a Cpaaaa annotation agree (", string(no_data),
+            " dataset(s) have no resolvable Cpaaaa annotation and are excluded); ",
+            string(total_mismatched_timepoints),
             " individual timepoint(s) disagree with their own dataset across all datasets",
         ),
         map(sort(collect(keys(groups)))) do group
@@ -130,14 +137,22 @@ end
 
 function render_group(datasets::Vector{DatasetOrientation}, reference_sign::Float64)
     DOM.ul(map(datasets) do d
-        dataset_class = d.matches_reference ? "" : HIGHLIGHT_CLASS
+        no_data = isnan(d.representative_sign)
+        dataset_class = (!no_data && !d.matches_reference) ? HIGHLIGHT_CLASS : ""
+        status_label = if no_data
+            " (no Cpaaaa annotation found)"
+        elseif d.matches_reference
+            " (PASS)"
+        else
+            " (FAIL — check for LR swap)"
+        end
         n_timepoints = length(d.dv_signs)
         DOM.li(DOM.details(
             DOM.summary(
                 "[", string(d.index), "] ",
                 DOM.code(d.cell_key_name),
                 " — representative sign: ", format_sign(d.representative_sign),
-                d.matches_reference ? " (PASS)" : " (FAIL — check for LR swap)",
+                status_label,
                 " — ", string(d.mismatched_timepoint_count), "/", string(n_timepoints),
                 " timepoints mismatched",
                 ; class=dataset_class,
@@ -232,8 +247,17 @@ function _synthetic_groups()
         0.45,
         "hyp7_Cpaaaa", rep, matches, matches ? 0 : 1,
     )
+    # A dataset with no resolvable Cpaaaa annotation at all — every timepoint
+    # is NaN, `representative_sign` is NaN, `matches_reference` is false.
+    # This must render as "no data", not as a swap-suspected FAIL.
+    no_data = DatasetOrientation(
+        2, "/nearline/shroff/example/Pos2/RegB", "cellkey2", 1, 3,
+        Int[], Float64[NaN, NaN, NaN], Float64[NaN, NaN, NaN], NaN,
+        Float64[NaN, NaN, NaN], Float64[NaN, NaN, NaN], NaN, NaN,
+        "", NaN, false, 0,
+    )
     Dict{String, Vector{DatasetOrientation}}(
-        "RW10000" => [mk(0, 1.0, true), mk(1, -1.0, false)],
+        "RW10000" => [mk(0, 1.0, true), mk(1, -1.0, false), no_data],
     )
 end
 
