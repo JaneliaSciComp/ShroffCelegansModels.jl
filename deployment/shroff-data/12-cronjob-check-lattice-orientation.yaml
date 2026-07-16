@@ -1,0 +1,68 @@
+# Daily QC scan of every dataset's tracked lattice for left-right (LR)
+# mislabeling: checks whether Cpaaaa (hyp7) sits dorsal to the seam-cell
+# plane at every timepoint, self-calibrating the expected sign as the
+# majority across all datasets (see web/scripts/check_lattice_orientation.jl).
+# Writes /data/annotations/lattice_orientation/lattice_orientation_YYYY_mm_dd_HHMMSS.h5
+# plus /data/annotations/lattice_orientation/lattice_orientation.h5 (latest) to
+# the shroff-data-annotations PVC. Scheduled 30 min after save-modified-times
+# to avoid contending for the same PVC/nearline mounts.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: check-lattice-orientation
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+    component: check-lattice-orientation
+spec:
+  schedule: "30 2 * * *"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # Building a spline model per timepoint (vs. save-modified-times' plain
+      # stat() calls) is heavier; keep a generous ceiling until real runtime
+      # is observed.
+      activeDeadlineSeconds: 14400
+      template:
+        metadata:
+          labels:
+            app: shroff-data
+            component: check-lattice-orientation
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: check-lattice-orientation
+              image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+              command:
+                - julia
+                - --project=/app/ShroffCelegansModels.jl/web
+                - /app/ShroffCelegansModels.jl/web/scripts/check_lattice_orientation.jl
+              workingDir: /app/ShroffCelegansModels.jl
+              env:
+                - name: LATTICE_ORIENTATION_DIR
+                  value: /data/annotations/lattice_orientation
+              volumeMounts:
+                - name: nearline
+                  mountPath: /nearline/shroff
+                  readOnly: true
+                - name: annotations
+                  mountPath: /data/annotations
+              resources:
+                requests:
+                  memory: 4Gi
+                  cpu: 500m
+                limits:
+                  memory: 8Gi
+                  cpu: "4"
+          volumes:
+            - name: nearline
+              persistentVolumeClaim:
+                claimName: shroff-data-nearline
+            - name: annotations
+              persistentVolumeClaim:
+                claimName: shroff-data-annotations

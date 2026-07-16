@@ -71,6 +71,7 @@ module ShroffCelegansModels
     # save_celegans_avg_models loads modelio
     include("save_celegans_avg_models.jl")
     include("demo_averaging/seam_cell_pts.jl")
+    include("demo_averaging/lattice_orientation.jl")
     include("demo_averaging/fix_annotation_ap_axis.jl")
     include("demo_averaging/get_avg_models.jl")
     include("demo_averaging/transform_annotations.jl")
