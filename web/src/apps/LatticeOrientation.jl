@@ -5,7 +5,7 @@ Submodule for the lattice LR-orientation QC page (deployment container
 `lattice-orientation`, port 9401). Pure Bonito DOM — no Makie. Reads
 `lattice_orientation.h5` (written by the check-lattice-orientation CronJob)
 and renders a nested, highlighted view of per-dataset/per-timepoint
-Cpaaaa-vs-seam-plane orientation signs.
+Cpaaaa-vs-seam-plane orientation signs, magnitudes, and LR cross-checks.
 
 The precompile workload renders a tiny synthetic tree through
 `Bonito.export_static`, caching the DOM-serialize path with no disk dependency
@@ -32,6 +32,12 @@ lattice_orientation_path() = joinpath(
     "lattice_orientation.h5",
 )
 
+# A DV (or LR) magnitude below this fraction of a dataset's own median
+# magnitude is flagged as a weak/low-confidence signal, independent of
+# whether its sign happens to agree with the dataset's representative sign.
+# Self-calibrated per dataset — no hardcoded absolute distance.
+const LOW_CONFIDENCE_RATIO = 0.25
+
 struct DatasetOrientation
     index::Int
     path::String
@@ -39,10 +45,17 @@ struct DatasetOrientation
     start::Int
     stop::Int
     outliers::Vector{Int}
-    signs::Vector{Float64}
+    dv_signs::Vector{Float64}
+    dv_magnitudes::Vector{Float64}
+    dv_magnitude_median::Float64
+    lr_signs::Vector{Float64}
+    lr_magnitudes::Vector{Float64}
+    lr_representative_sign::Float64
+    lr_magnitude_median::Float64
     cpaaaa_key::String
     representative_sign::Float64
     matches_reference::Bool
+    mismatched_timepoint_count::Int
 end
 
 function read_lattice_orientation(path::AbstractString)
@@ -64,9 +77,16 @@ function read_lattice_orientation(path::AbstractString)
                     Int(A["cell_key.end"]),
                     Int.(A["cell_key.outliers"]),
                     Float64.(read(ds)),
+                    Float64.(A["dv_magnitude"]),
+                    Float64(A["dv_magnitude_median"]),
+                    Float64.(A["lr_sign"]),
+                    Float64.(A["lr_magnitude"]),
+                    Float64(A["lr_representative_sign"]),
+                    Float64(A["lr_magnitude_median"]),
                     string(A["cpaaaa_key"]),
                     Float64(A["representative_sign"]),
                     Bool(A["matches_reference"]),
+                    Int(A["mismatched_timepoint_count"]),
                 )
             end
             groups[group_name] = entries
@@ -76,12 +96,15 @@ function read_lattice_orientation(path::AbstractString)
 end
 
 format_sign(s::Real) = isnan(s) ? "no annotation" : (s > 0 ? "+1 (dorsal)" : "-1 (ventral)")
+format_lr_sign(s::Real) = isnan(s) ? "n/a" : (s > 0 ? "+1 (right)" : "-1 (left)")
+format_magnitude(m::Real) = isnan(m) ? "n/a" : string(round(m; digits=2))
 
 const HIGHLIGHT_CLASS = "shroff-highlight"
 
 function render_summary(reference_sign::Float64, groups::Dict{String, Vector{DatasetOrientation}}, source_mtime::Float64)
     all_entries = collect(Iterators.flatten(values(groups)))
     mismatched = count(d -> !d.matches_reference, all_entries)
+    total_mismatched_timepoints = sum(d -> d.mismatched_timepoint_count, all_entries; init=0)
     DOM.main(
         theme_assets()...,
         DOM.h2("Lattice LR orientation"),
@@ -92,7 +115,8 @@ function render_summary(reference_sign::Float64, groups::Dict{String, Vector{Dat
         DOM.p(
             "Reference (dorsal) sign: ", DOM.strong(format_sign(reference_sign)),
             " — ", string(length(all_entries) - mismatched), "/", string(length(all_entries)),
-            " datasets agree",
+            " datasets agree; ", string(total_mismatched_timepoints),
+            " individual timepoint(s) disagree with their own dataset across all datasets",
         ),
         map(sort(collect(keys(groups)))) do group
             DOM.section(
@@ -107,12 +131,15 @@ end
 function render_group(datasets::Vector{DatasetOrientation}, reference_sign::Float64)
     DOM.ul(map(datasets) do d
         dataset_class = d.matches_reference ? "" : HIGHLIGHT_CLASS
+        n_timepoints = length(d.dv_signs)
         DOM.li(DOM.details(
             DOM.summary(
                 "[", string(d.index), "] ",
                 DOM.code(d.cell_key_name),
                 " — representative sign: ", format_sign(d.representative_sign),
                 d.matches_reference ? " (PASS)" : " (FAIL — check for LR swap)",
+                " — ", string(d.mismatched_timepoint_count), "/", string(n_timepoints),
+                " timepoints mismatched",
                 ; class=dataset_class,
             ),
             DOM.div("path: ", DOM.code(d.path)),
@@ -121,15 +148,33 @@ function render_group(datasets::Vector{DatasetOrientation}, reference_sign::Floa
                 "timepoints: ", string(d.start), "–", string(d.stop),
                 ", outliers: ", isempty(d.outliers) ? "none" : join(d.outliers, ", "),
             ),
-            DOM.ul(map(eachindex(d.signs)) do i
+            DOM.div(
+                "DV magnitude (median): ", format_magnitude(d.dv_magnitude_median),
+                " — LR: representative sign ", format_lr_sign(d.lr_representative_sign),
+                ", magnitude (median) ", format_magnitude(d.lr_magnitude_median),
+            ),
+            DOM.ul(map(eachindex(d.dv_signs)) do i
                 tp = d.start + i - 1
-                s = d.signs[i]
+                s = d.dv_signs[i]
+                mag = d.dv_magnitudes[i]
+                lr_s = d.lr_signs[i]
+                lr_mag = d.lr_magnitudes[i]
                 inconsistent = !isnan(s) && !isnan(d.representative_sign) && s != d.representative_sign
-                tp_class = inconsistent ? HIGHLIGHT_CLASS : ""
+                weak = !isnan(mag) && !isnan(d.dv_magnitude_median) && d.dv_magnitude_median > 0 &&
+                    mag < LOW_CONFIDENCE_RATIO * d.dv_magnitude_median
+                tp_class = (inconsistent || weak) ? HIGHLIGHT_CLASS : ""
                 label = if isnan(s)
                     tp in d.outliers ? "outlier" : "no Cpaaaa annotation"
                 else
-                    format_sign(s) * (inconsistent ? " — inconsistent with dataset" : "")
+                    join(
+                        filter(!isempty, [
+                            format_sign(s) * " (mag " * format_magnitude(mag) * ")",
+                            inconsistent ? "inconsistent with dataset" : "",
+                            weak ? "weak signal" : "",
+                            "LR " * format_lr_sign(lr_s) * " (mag " * format_magnitude(lr_mag) * ")",
+                        ]),
+                        " — ",
+                    )
                 end
                 DOM.li("t=", string(tp), ": ", label; class=tp_class)
             end),
@@ -177,7 +222,15 @@ end
 function _synthetic_groups()
     mk(i, rep, matches) = DatasetOrientation(
         i, "/nearline/shroff/example/Pos$i/RegB", "cellkey$i", 1, 3,
-        Int[], Float64[1.0, NaN, matches ? 1.0 : -1.0], "hyp7_Cpaaaa", rep, matches,
+        Int[],
+        Float64[1.0, NaN, matches ? 1.0 : -1.0],
+        Float64[3.5, NaN, 3.1],
+        3.3,
+        Float64[-1.0, NaN, -1.0],
+        Float64[0.4, NaN, 0.5],
+        -1.0,
+        0.45,
+        "hyp7_Cpaaaa", rep, matches, matches ? 0 : 1,
     )
     Dict{String, Vector{DatasetOrientation}}(
         "RW10000" => [mk(0, 1.0, true), mk(1, -1.0, false)],
