@@ -135,6 +135,27 @@ function lattice_orientation_cpaaaa_key(dataset::NormalizedDataset)
     return nothing
 end
 
+# The set of every raw annotation name that *some* dataset's
+# `cell_key.mapping` translates to a genuinely different display name —
+# i.e. every name confirmed to sometimes be a MIPAV positional placeholder
+# rather than a stable identity (identity/self-mappings don't count: a
+# dataset mapping a name to itself is confirming it, not placeholding it).
+# Used to decide whether an *unmapped* occurrence of that name in some other
+# dataset is safe to trust: if the name is known to be reused for different
+# cells elsewhere, an unmapped occurrence more likely reflects an incomplete
+# `cell_key.mapping` than a confirmed identity, and should not be trusted.
+function known_placeholder_names(datasets::Dict{String, Vector{NormalizedDataset}})
+    names = Set{String}()
+    for dsv in values(datasets), ds in dsv
+        for (raw, display) in ds.cell_key.mapping
+            raw_str = string(raw)
+            raw_str == display && continue
+            push!(names, raw_str)
+        end
+    end
+    return names
+end
+
 # Every cell's per-timepoint axes for one dataset — used to survey candidate
 # anchor cells besides Cpaaaa (e.g. for strains where it isn't tracked).
 # Timepoints where the model can't be built or the annotations file can't be
@@ -147,11 +168,15 @@ end
 # (confirmed on real data: "C10" maps to 4 unrelated cells, "C2" to 11).
 # `resolve_cpaaaa_key` already handles this one-cell-at-a-time via
 # `cell_key.mapping`; here every raw name is resolved to its canonical
-# display name (falling back to the raw name itself when it has no mapping
-# entry, i.e. the CSV already stored a stable name directly) before
-# accumulating, so cross-dataset aggregation groups the same real cell
-# together instead of colliding unrelated cells under the same placeholder.
-function dataset_cell_orientation_survey(dataset::NormalizedDataset)
+# display name via this dataset's own mapping. A raw name with no entry in
+# *this* dataset's mapping is normally assumed to already be stable — unless
+# it's in `known_placeholders` (confirmed a placeholder in some *other*
+# dataset), in which case it's dropped rather than trusted, since the
+# omission more likely reflects an incomplete mapping than a real identity.
+function dataset_cell_orientation_survey(
+    dataset::NormalizedDataset,
+    known_placeholders::AbstractSet{<:AbstractString} = Set{String}(),
+)
     mts = ModelTimeSeries(dataset)
     n = length(range(dataset.cell_key))
     mapping = dataset.cell_key.mapping
@@ -164,7 +189,14 @@ function dataset_cell_orientation_survey(dataset::NormalizedDataset)
             ismissing(dict) && continue
             per_cell = lattice_orientation_axes_all(model, dict)
             for (raw_name, ax) in per_cell
-                canonical = get(mapping, Symbol(raw_name), raw_name)
+                sym = Symbol(raw_name)
+                if haskey(mapping, sym)
+                    canonical = mapping[sym]
+                elseif raw_name in known_placeholders
+                    continue
+                else
+                    canonical = raw_name
+                end
                 push!(get!(() -> typeof(NAN_AXES)[], result, canonical), ax)
             end
         catch
