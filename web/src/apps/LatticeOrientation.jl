@@ -1,11 +1,14 @@
 """
     LatticeOrientation
 
-Submodule for the lattice LR-orientation QC page (deployment container
+Submodule for the lattice orientation QC page (deployment container
 `lattice-orientation`, port 9401). Pure Bonito DOM — no Makie. Reads
-`lattice_orientation.h5` (written by the check-lattice-orientation CronJob)
-and renders a nested, highlighted view of per-dataset/per-timepoint
-Cpaaaa-vs-seam-plane orientation signs, magnitudes, and LR cross-checks.
+`lattice_orientation.h5` (written by the check-lattice-orientation CronJob,
+`web/scripts/check_lattice_orientation.jl`) and renders, per dataset, every
+resolvable named check (`hyp7_Cpaaaa` plus the survey-derived candidate
+cells) as a nested, highlighted pass/fail tree with sign, magnitude, and —
+for inconsistent timepoints — a deep link into `/fix_annotation_ap_axis/`
+for that exact dataset/cell/timepoint.
 
 The precompile workload renders a tiny synthetic tree through
 `Bonito.export_static`, caching the DOM-serialize path with no disk dependency
@@ -32,11 +35,32 @@ lattice_orientation_path() = joinpath(
     "lattice_orientation.h5",
 )
 
-# A DV (or LR) magnitude below this fraction of a dataset's own median
-# magnitude is flagged as a weak/low-confidence signal, independent of
+# A magnitude below this fraction of a dataset's own median magnitude (for
+# that check) is flagged as a weak/low-confidence signal, independent of
 # whether its sign happens to agree with the dataset's representative sign.
-# Self-calibrated per dataset — no hardcoded absolute distance.
+# Self-calibrated per (dataset, check) — no hardcoded absolute distance.
 const LOW_CONFIDENCE_RATIO = 0.25
+
+# Same URL scheme as `ShroffCelegansModels.get_fix_url` (src/demo_averaging/
+# zscore_analysis.jl), reimplemented locally rather than reused: that
+# function is defined via a runtime `Base.include` into the ZscoreAnalysis
+# module (world-age hazard — see notes/), whereas this app must stay fully
+# precompilable.
+fix_ap_axis_url(group::AbstractString, group_idx::Integer, annotation::AbstractString, timepoint::Integer) =
+    "https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/fix_annotation_ap_axis/$group/$group_idx?annotation=$annotation&timepoint=$timepoint"
+
+struct AnnotationCheck
+    annotation_name::String
+    axis::Symbol
+    signs::Vector{Float64}
+    magnitudes::Vector{Float64}
+    magnitude_median::Float64
+    representative_sign::Float64
+    reference_sign::Float64
+    matches_reference::Bool
+    mismatched_timepoint_count::Int
+    link_eligible::Bool
+end
 
 struct DatasetOrientation
     index::Int
@@ -45,30 +69,36 @@ struct DatasetOrientation
     start::Int
     stop::Int
     outliers::Vector{Int}
-    dv_signs::Vector{Float64}
-    dv_magnitudes::Vector{Float64}
-    dv_magnitude_median::Float64
-    lr_signs::Vector{Float64}
-    lr_magnitudes::Vector{Float64}
-    lr_representative_sign::Float64
-    lr_magnitude_median::Float64
-    cpaaaa_key::String
-    representative_sign::Float64
-    matches_reference::Bool
-    mismatched_timepoint_count::Int
+    checks::Vector{AnnotationCheck}
 end
 
 function read_lattice_orientation(path::AbstractString)
     h5open(path, "r") do f
-        reference_sign = Float64(attrs(f)["reference_sign"])
         root = f["lattice_orientation"]
         groups = Dict{String, Vector{DatasetOrientation}}()
         for group_name in keys(root)
             g = root[group_name]
             indices = sort(parse.(Int, collect(keys(g))))
             entries = map(indices) do i
-                ds = g[string(i)]
-                A = attrs(ds)
+                dsg = g[string(i)]
+                A = attrs(dsg)
+                check_count = Int(A["check_count"])
+                checks = map(1:check_count) do c
+                    cg = dsg[string("check_", c)]
+                    CA = attrs(cg)
+                    AnnotationCheck(
+                        string(CA["annotation_name"]),
+                        Symbol(CA["axis"]),
+                        Float64.(read(cg["sign"])),
+                        Float64.(CA["magnitude"]),
+                        Float64(CA["magnitude_median"]),
+                        Float64(CA["representative_sign"]),
+                        Float64(CA["reference_sign"]),
+                        Bool(CA["matches_reference"]),
+                        Int(CA["mismatched_timepoint_count"]),
+                        Bool(CA["link_eligible"]),
+                    )
+                end
                 DatasetOrientation(
                     i,
                     string(A["path"]),
@@ -76,130 +106,137 @@ function read_lattice_orientation(path::AbstractString)
                     Int(A["cell_key.start"]),
                     Int(A["cell_key.end"]),
                     Int.(A["cell_key.outliers"]),
-                    Float64.(read(ds)),
-                    Float64.(A["dv_magnitude"]),
-                    Float64(A["dv_magnitude_median"]),
-                    Float64.(A["lr_sign"]),
-                    Float64.(A["lr_magnitude"]),
-                    Float64(A["lr_representative_sign"]),
-                    Float64(A["lr_magnitude_median"]),
-                    string(A["cpaaaa_key"]),
-                    Float64(A["representative_sign"]),
-                    Bool(A["matches_reference"]),
-                    Int(A["mismatched_timepoint_count"]),
+                    checks,
                 )
             end
             groups[group_name] = entries
         end
-        return reference_sign, groups
+        return groups
     end
 end
 
-format_sign(s::Real) = isnan(s) ? "no annotation" : (s > 0 ? "+1 (dorsal)" : "-1 (ventral)")
-format_lr_sign(s::Real) = isnan(s) ? "n/a" : (s > 0 ? "+1 (right)" : "-1 (left)")
+format_sign(axis::Symbol, s::Real) = isnan(s) ? "no annotation" :
+    axis === :dv ? (s > 0 ? "+1 (dorsal)" : "-1 (ventral)") : (s > 0 ? "+1 (right)" : "-1 (left)")
 format_magnitude(m::Real) = isnan(m) ? "n/a" : string(round(m; digits=2))
+axis_label(axis::Symbol) = axis === :dv ? "DV" : "LR"
 
 const HIGHLIGHT_CLASS = "shroff-highlight"
 
-function render_summary(reference_sign::Float64, groups::Dict{String, Vector{DatasetOrientation}}, source_mtime::Float64)
-    all_entries = collect(Iterators.flatten(values(groups)))
-    # A dataset with no resolvable Cpaaaa annotation (`representative_sign`
-    # is NaN) has nothing to check — it isn't a swap failure, just missing
-    # data, so it must not be lumped in with real disagreements.
-    no_data = count(d -> isnan(d.representative_sign), all_entries)
-    checkable = length(all_entries) - no_data
-    disagree = count(d -> !isnan(d.representative_sign) && !d.matches_reference, all_entries)
-    total_mismatched_timepoints = sum(d -> d.mismatched_timepoint_count, all_entries; init=0)
+# One row per distinct (annotation_name, axis) check, aggregated across every
+# dataset that resolves it — lets the page header summarize all ~30 checks
+# without repeating each dataset's full detail.
+function check_overview(groups::Dict{String, Vector{DatasetOrientation}})
+    seen = Dict{Tuple{String,Symbol}, @NamedTuple{reference_sign::Float64, resolved::Int, mismatched::Int}}()
+    for datasets in values(groups), d in datasets, c in d.checks
+        key = (c.annotation_name, c.axis)
+        prev = get(seen, key, (reference_sign = c.reference_sign, resolved = 0, mismatched = 0))
+        seen[key] = (
+            reference_sign = c.reference_sign,
+            resolved = prev.resolved + 1,
+            mismatched = prev.mismatched + (c.matches_reference ? 0 : 1),
+        )
+    end
+    return seen
+end
+
+function render_summary(groups::Dict{String, Vector{DatasetOrientation}}, source_mtime::Float64)
+    overview = check_overview(groups)
     DOM.main(
         theme_assets()...,
-        DOM.h2("Lattice LR orientation"),
+        DOM.h2("Lattice orientation"),
         DOM.p(
             "Source: ", DOM.code(lattice_orientation_path()),
             " (file mtime: ", isnan(source_mtime) ? "" : string(source_mtime), ")",
         ),
-        DOM.p(
-            "Reference (dorsal) sign: ", DOM.strong(format_sign(reference_sign)),
-            " — ", string(checkable - disagree), "/", string(checkable),
-            " datasets with a Cpaaaa annotation agree (", string(no_data),
-            " dataset(s) have no resolvable Cpaaaa annotation and are excluded); ",
-            string(total_mismatched_timepoints),
-            " individual timepoint(s) disagree with their own dataset across all datasets",
-        ),
+        DOM.h3("Checks"),
+        DOM.ul(map(sort(collect(keys(overview)); by = k -> (string(k[2]), k[1]))) do key
+            name, axis = key
+            o = overview[key]
+            DOM.li(
+                DOM.code(name), " (", axis_label(axis), ") — reference sign: ",
+                DOM.strong(format_sign(axis, o.reference_sign)),
+                " — ", string(o.resolved - o.mismatched), "/", string(o.resolved),
+                " datasets agree",
+            )
+        end),
         map(sort(collect(keys(groups)))) do group
             DOM.section(
                 DOM.h3(group),
-                render_group(groups[group], reference_sign),
+                render_group(group, groups[group]),
             )
         end...,
         ; class="shroff-mtime container",
     )
 end
 
-function render_group(datasets::Vector{DatasetOrientation}, reference_sign::Float64)
+function render_group(group::AbstractString, datasets::Vector{DatasetOrientation})
     DOM.ul(map(datasets) do d
-        no_data = isnan(d.representative_sign)
-        dataset_class = (!no_data && !d.matches_reference) ? HIGHLIGHT_CLASS : ""
-        status_label = if no_data
-            " (no Cpaaaa annotation found)"
-        elseif d.matches_reference
-            " (PASS)"
-        else
-            " (FAIL — check for LR swap)"
-        end
-        n_timepoints = length(d.dv_signs)
+        any_fail = any(c -> !c.matches_reference, d.checks)
+        total_mismatched_timepoints = sum(c -> c.mismatched_timepoint_count, d.checks; init=0)
         DOM.li(DOM.details(
             DOM.summary(
                 "[", string(d.index), "] ",
                 DOM.code(d.cell_key_name),
-                " — representative sign: ", format_sign(d.representative_sign),
-                status_label,
-                " — ", string(d.mismatched_timepoint_count), "/", string(n_timepoints),
-                " timepoints mismatched",
-                ; class=dataset_class,
+                " — ", string(length(d.checks)), " check(s) resolved, ",
+                string(total_mismatched_timepoints), " timepoint mismatch(es)",
+                any_fail ? " (check for swap)" : "",
+                ; class = any_fail ? HIGHLIGHT_CLASS : "",
             ),
             DOM.div("path: ", DOM.code(d.path)),
-            DOM.div("Cpaaaa annotation key: ", DOM.code(isempty(d.cpaaaa_key) ? "not found" : d.cpaaaa_key)),
             DOM.div(
                 "timepoints: ", string(d.start), "–", string(d.stop),
                 ", outliers: ", isempty(d.outliers) ? "none" : join(d.outliers, ", "),
             ),
-            DOM.div(
-                "DV magnitude (median): ", format_magnitude(d.dv_magnitude_median),
-                " — LR: representative sign ", format_lr_sign(d.lr_representative_sign),
-                ", magnitude (median) ", format_magnitude(d.lr_magnitude_median),
-            ),
-            DOM.ul(map(eachindex(d.dv_signs)) do i
-                tp = d.start + i - 1
-                s = d.dv_signs[i]
-                mag = d.dv_magnitudes[i]
-                lr_s = d.lr_signs[i]
-                lr_mag = d.lr_magnitudes[i]
-                inconsistent = !isnan(s) && !isnan(d.representative_sign) && s != d.representative_sign
-                weak = !isnan(mag) && !isnan(d.dv_magnitude_median) && d.dv_magnitude_median > 0 &&
-                    mag < LOW_CONFIDENCE_RATIO * d.dv_magnitude_median
-                tp_class = (inconsistent || weak) ? HIGHLIGHT_CLASS : ""
-                label = if isnan(s)
-                    tp in d.outliers ? "outlier" : "no Cpaaaa annotation"
-                else
-                    join(
-                        filter(!isempty, [
-                            format_sign(s) * " (mag " * format_magnitude(mag) * ")",
-                            inconsistent ? "inconsistent with dataset" : "",
-                            weak ? "weak signal" : "",
-                            "LR " * format_lr_sign(lr_s) * " (mag " * format_magnitude(lr_mag) * ")",
-                        ]),
-                        " — ",
-                    )
-                end
-                DOM.li("t=", string(tp), ": ", label; class=tp_class)
-            end),
+            isempty(d.checks) ?
+                DOM.p("No checked cells were resolvable for this dataset.") :
+                DOM.ul(map(c -> render_check(group, d, c), d.checks)),
         ))
     end...)
 end
 
+function render_check(group::AbstractString, d::DatasetOrientation, c::AnnotationCheck)
+    n_timepoints = length(c.signs)
+    status_label = c.matches_reference ? " (PASS)" : " (FAIL — check for swap)"
+    DOM.li(DOM.details(
+        DOM.summary(
+            DOM.code(c.annotation_name), " (", axis_label(c.axis), ")",
+            " — representative sign: ", format_sign(c.axis, c.representative_sign),
+            status_label,
+            " — ", string(c.mismatched_timepoint_count), "/", string(n_timepoints), " timepoints mismatched",
+            " — magnitude (median): ", format_magnitude(c.magnitude_median),
+            ; class = c.matches_reference ? "" : HIGHLIGHT_CLASS,
+        ),
+        DOM.ul(map(eachindex(c.signs)) do i
+            tp = d.start + i - 1
+            s = c.signs[i]
+            mag = c.magnitudes[i]
+            inconsistent = !isnan(s) && s != c.representative_sign
+            weak = !isnan(mag) && !isnan(c.magnitude_median) && c.magnitude_median > 0 &&
+                mag < LOW_CONFIDENCE_RATIO * c.magnitude_median
+            tp_class = (inconsistent || weak) ? HIGHLIGHT_CLASS : ""
+            if isnan(s)
+                DOM.li("t=", string(tp), ": ", tp in d.outliers ? "outlier" : "no annotation"; class=tp_class)
+            else
+                label = join(
+                    filter(!isempty, [
+                        format_sign(c.axis, s) * " (mag " * format_magnitude(mag) * ")",
+                        inconsistent ? "inconsistent with dataset" : "",
+                        weak ? "weak signal" : "",
+                    ]),
+                    " — ",
+                )
+                fix_link = (inconsistent && c.link_eligible) ?
+                    DOM.a(" [fix]"; href=fix_ap_axis_url(group, d.index, c.annotation_name, tp), target="_blank") :
+                    ""
+                DOM.li("t=", string(tp), ": ", label, fix_link; class=tp_class)
+            end
+        end),
+    ))
+end
+
 function render_missing(path::AbstractString)
     DOM.div(
-        DOM.h2("Lattice LR orientation"),
+        DOM.h2("Lattice orientation"),
         DOM.p("No data yet. Expected ", DOM.code(path), " but it does not exist."),
         DOM.p("This file is generated by the check-lattice-orientation CronJob."),
     )
@@ -210,13 +247,13 @@ function web_lattice_orientation()
         "0.0.0.0", PORT;
         proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/lattice_orientation/",
     )
-    route!(server, "/" => App(; title="Shroff C. elegans lattice LR orientation") do
+    route!(server, "/" => App(; title="Shroff C. elegans lattice orientation") do
         path = lattice_orientation_path()
         if !isfile(path)
             return render_missing(path)
         end
-        reference_sign, groups = read_lattice_orientation(path)
-        return render_summary(reference_sign, groups, Float64(mtime(path)))
+        groups = read_lattice_orientation(path)
+        return render_summary(groups, Float64(mtime(path)))
     end)
     return server
 end
@@ -235,26 +272,18 @@ end
 # --- precompile workload -------------------------------------------------------
 
 function _synthetic_groups()
-    mk(i, rep, matches) = DatasetOrientation(
-        i, "/nearline/shroff/example/Pos$i/RegB", "cellkey$i", 1, 3,
-        Int[],
-        Float64[1.0, NaN, matches ? 1.0 : -1.0],
-        Float64[3.5, NaN, 3.1],
-        3.3,
-        Float64[-1.0, NaN, -1.0],
-        Float64[0.4, NaN, 0.5],
-        -1.0,
-        0.45,
-        "hyp7_Cpaaaa", rep, matches, matches ? 0 : 1,
+    mk_check(name, axis, rep, matches; magnitudes=Float64[3.5, NaN, 3.1], link_eligible=true) = AnnotationCheck(
+        name, axis,
+        Float64[rep, NaN, matches ? rep : -rep],
+        magnitudes, 3.3, rep, rep, matches, matches ? 0 : 1, link_eligible,
     )
-    # A dataset with no resolvable Cpaaaa annotation at all — every timepoint
-    # is NaN, `representative_sign` is NaN, `matches_reference` is false.
-    # This must render as "no data", not as a swap-suspected FAIL.
+    mk(i, rep, matches) = DatasetOrientation(
+        i, "/nearline/shroff/example/Pos$i/RegB", "cellkey$i", 1, 3, Int[],
+        [mk_check("hyp7_Cpaaaa", :dv, rep, matches), mk_check("AVDL", :lr, -1.0, true; link_eligible=true)],
+    )
+    # A dataset with no resolvable checks at all.
     no_data = DatasetOrientation(
-        2, "/nearline/shroff/example/Pos2/RegB", "cellkey2", 1, 3,
-        Int[], Float64[NaN, NaN, NaN], Float64[NaN, NaN, NaN], NaN,
-        Float64[NaN, NaN, NaN], Float64[NaN, NaN, NaN], NaN, NaN,
-        "", NaN, false, 0,
+        2, "/nearline/shroff/example/Pos2/RegB", "cellkey2", 1, 3, Int[], AnnotationCheck[],
     )
     Dict{String, Vector{DatasetOrientation}}(
         "RW10000" => [mk(0, 1.0, true), mk(1, -1.0, false), no_data],
@@ -266,7 +295,7 @@ if @load_preference("precompile_workload", true)
     groups = _synthetic_groups()
     @compile_workload begin
         try
-            app = App(() -> render_summary(1.0, groups, 1.7e9))
+            app = App(() -> render_summary(groups, 1.7e9))
             mktempdir() do dir
                 export_static(joinpath(dir, "lattice_orientation.html"), app)
             end

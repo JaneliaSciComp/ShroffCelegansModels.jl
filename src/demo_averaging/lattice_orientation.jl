@@ -91,10 +91,38 @@ function lattice_orientation_axes_all(model::AbstractCelegansModel, dict::Abstra
     return Dict(string(names[i]) => axes[i] for i in eachindex(names))
 end
 
-# One dataset, one cell (Cpaaaa/hyp7): per-timepoint axes (`NAN_AXES` for
-# outliers / missing annotation / build failures), mirroring
-# `MIPAVIO.get_lattice_modified_times_unix(dataset)`.
-function lattice_orientation_series(dataset::NormalizedDataset)
+# Resolve which key in a twisted-annotations dict corresponds to
+# `target_name`, trusting *only* this dataset's own `cell_key.mapping` (no
+# direct-name fallback, unlike `resolve_cpaaaa_key`). This is also exactly
+# the set of names `fix_annotation_ap_axis`'s cell dropdown offers
+# (`sort!(collect(values(dataset.cell_key.mapping)))`
+# — src/demo_averaging/fix_annotation_ap_axis.jl:215), so a cell resolved
+# this way is guaranteed to be selectable there; a cell only found via
+# direct-name matching (e.g. `resolve_cpaaaa_key`'s fallback) is not.
+function resolve_mapped_key(dict::AbstractDict, cell_key::CellKey, target_name::AbstractString)
+    for (raw, display) in cell_key.mapping
+        if display == target_name
+            raw_str = string(raw)
+            haskey(dict, raw_str) && return raw_str
+        end
+    end
+    return nothing
+end
+
+# Whether `target_name` is one of the display names `fix_annotation_ap_axis`
+# would offer for this dataset (see `resolve_mapped_key`) — i.e. whether a
+# deep link into it with `?annotation=target_name` will actually select that
+# cell rather than silently falling back to some other one.
+fix_ap_axis_selectable(cell_key::CellKey, target_name::AbstractString) =
+    target_name in values(cell_key.mapping)
+
+# One dataset, one cell: per-timepoint axes (`NAN_AXES` for outliers /
+# missing annotation / build failures), mirroring
+# `MIPAVIO.get_lattice_modified_times_unix(dataset)`. `resolve` is called as
+# `resolve(dict, cell_key)` and must return the raw annotation key (or
+# `nothing`) — pass `resolve_cpaaaa_key` or a closure over
+# `resolve_mapped_key` for a specific `target_name`.
+function named_cell_orientation_series(dataset::NormalizedDataset, resolve)
     mts = ModelTimeSeries(dataset)
     n = length(range(dataset.cell_key))
     map(1:n) do i
@@ -103,13 +131,19 @@ function lattice_orientation_series(dataset::NormalizedDataset)
             ismissing(model) && return NAN_AXES
             dict = twisted_annotations(dataset, i)
             ismissing(dict) && return NAN_AXES
-            key = resolve_cpaaaa_key(dict, dataset.cell_key)
+            key = resolve(dict, dataset.cell_key)
             isnothing(key) && return NAN_AXES
             lattice_orientation_axes(model, dict[key])
         catch
             NAN_AXES
         end
     end
+end
+
+# One dataset, Cpaaaa/hyp7 specifically: per-timepoint axes, mirroring
+# `MIPAVIO.get_lattice_modified_times_unix(dataset)`.
+function lattice_orientation_series(dataset::NormalizedDataset)
+    named_cell_orientation_series(dataset, resolve_cpaaaa_key)
 end
 
 function lattice_orientation_series(datasets::Dict{String, Vector{NormalizedDataset}})
