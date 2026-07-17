@@ -140,6 +140,47 @@ function named_cell_orientation_series(dataset::NormalizedDataset, resolve)
     end
 end
 
+# Many resolvers at once, one dataset: per-timepoint axes for *every*
+# resolver in `resolvers`, sharing a single `ModelTimeSeries`/
+# `twisted_annotations` build per timepoint across all of them. Calling
+# `named_cell_orientation_series` once per resolver would rebuild every
+# timepoint's spline model once per resolver — `ModelTimeSeries`'s LRU cache
+# is per-instance (a fresh, empty one each call), not shared across separate
+# calls, so with dozens of resolvers that's dozens of times the model-build
+# cost for no benefit. Returns a `Vector` (one per resolver, same order as
+# `resolvers`) of per-timepoint axes vectors, mirroring
+# `dataset_cell_orientation_survey`'s one-pass-per-timepoint shape.
+function dataset_checks_series(dataset::NormalizedDataset, resolvers)
+    mts = ModelTimeSeries(dataset)
+    n = length(range(dataset.cell_key))
+    series = [Vector{typeof(NAN_AXES)}(undef, n) for _ in resolvers]
+    for i in 1:n
+        model = try
+            mts(i)
+        catch
+            missing
+        end
+        dict = ismissing(model) ? missing : try
+            twisted_annotations(dataset, i)
+        catch
+            missing
+        end
+        for (ri, resolve) in enumerate(resolvers)
+            series[ri][i] = if ismissing(model) || ismissing(dict)
+                NAN_AXES
+            else
+                try
+                    key = resolve(dict, dataset.cell_key)
+                    isnothing(key) ? NAN_AXES : lattice_orientation_axes(model, dict[key])
+                catch
+                    NAN_AXES
+                end
+            end
+        end
+    end
+    return series
+end
+
 # One dataset, Cpaaaa/hyp7 specifically: per-timepoint axes, mirroring
 # `MIPAVIO.get_lattice_modified_times_unix(dataset)`.
 function lattice_orientation_series(dataset::NormalizedDataset)

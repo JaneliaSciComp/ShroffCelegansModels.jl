@@ -48,7 +48,7 @@ using HDF5: HDF5, h5open, create_group, attrs
 using Statistics: median
 using ShroffCelegansModels
 using ShroffCelegansModels: read_config_json, NormalizedDataset,
-                             named_cell_orientation_series, resolve_cpaaaa_key,
+                             dataset_checks_series, resolve_cpaaaa_key,
                              resolve_mapped_key, fix_ap_axis_selectable
 
 # Cells found by survey_cell_orientation_candidates.jl's greedy set-cover
@@ -108,21 +108,29 @@ function write_atomic(f, dst::AbstractString)
     end
 end
 
-# One check, evaluated across every dataset: per-group per-dataset axes
-# series, per-dataset representative sign, and the check's global reference
-# sign (majority of representative signs, one dataset one vote).
-function evaluate_check(chk, datasets::Dict{String, Vector{NormalizedDataset}})
-    series = Dict(
-        group => [named_cell_orientation_series(ds, chk.resolve) for ds in dsv]
+# Every check, evaluated across every dataset. Computes each dataset's
+# per-timepoint axes for *all* checks in one pass (`dataset_checks_series`
+# shares the model/annotation-dict build per timepoint across every
+# resolver — calling `named_cell_orientation_series` once per check would
+# rebuild the spline model once per check per timepoint, ~`length(CHECKS)`×
+# more model-building work for no benefit), then aggregates per check:
+# per-dataset representative sign, and the check's global reference sign
+# (majority of representative signs, one dataset one vote).
+function evaluate_checks(checks, datasets::Dict{String, Vector{NormalizedDataset}})
+    all_series = Dict(
+        group => [dataset_checks_series(ds, [chk.resolve for chk in checks]) for ds in dsv]
         for (group, dsv) in datasets
     )
-    representative = Dict(
-        group => [majority_sign([axis_sign(a, chk.axis) for a in axes]) for axes in series[group]]
-        for group in keys(series)
-    )
-    all_representative = reduce(vcat, values(representative); init=Float64[])
-    reference_sign = majority_sign(all_representative)
-    return (check = chk, series = series, representative = representative, reference_sign = reference_sign)
+    return map(enumerate(checks)) do (ci, chk)
+        series = Dict(group => [s[ci] for s in all_series[group]] for group in keys(all_series))
+        representative = Dict(
+            group => [majority_sign([axis_sign(a, chk.axis) for a in axes]) for axes in series[group]]
+            for group in keys(series)
+        )
+        all_representative = reduce(vcat, values(representative); init=Float64[])
+        reference_sign = majority_sign(all_representative)
+        (check = chk, series = series, representative = representative, reference_sign = reference_sign)
+    end
 end
 
 function save_lattice_orientation(
@@ -185,7 +193,7 @@ function main()
     @info "Loaded datasets" groups=length(datasets) total=sum(length, values(datasets))
 
     @info "Checking lattice orientation" check_count=length(CHECKS)
-    evaluated = map(chk -> evaluate_check(chk, datasets), CHECKS)
+    evaluated = evaluate_checks(CHECKS, datasets)
     for ev in evaluated
         all_representative = reduce(vcat, values(ev.representative); init=Float64[])
         resolved = count(!isnan, all_representative)
