@@ -92,6 +92,7 @@ function summarize(agg::Dict{String, CellAgg})
             name = name,
             dataset_count = length(a.datasets),
             group_count = length(a.groups),
+            groups = join(sort(collect(a.groups)), "|"),
             dv_consistency = dv_cons,
             dv_n = dv_n,
             dv_magnitude_median = dv_mag,
@@ -107,14 +108,16 @@ end
 
 function write_csv(path::AbstractString, rows)
     header = [
-        "name", "dataset_count", "group_count",
+        "name", "dataset_count", "group_count", "groups",
         "dv_consistency", "dv_n", "dv_magnitude_median", "dv_score",
         "lr_consistency", "lr_n", "lr_magnitude_median", "lr_score",
     ]
     open(path, "w") do io
         println(io, join(header, ","))
         for r in rows
-            println(io, join((r.name, r.dataset_count, r.group_count,
+            # `groups` is `|`-joined (not comma) so it stays a single,
+            # unquoted CSV field.
+            println(io, join((r.name, r.dataset_count, r.group_count, r.groups,
                                r.dv_consistency, r.dv_n, r.dv_magnitude_median, r.dv_score,
                                r.lr_consistency, r.lr_n, r.lr_magnitude_median, r.lr_score), ","))
         end
