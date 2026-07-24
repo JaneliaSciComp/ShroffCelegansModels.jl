@@ -66,6 +66,99 @@ function finite_diff_tangents(curve::Vector{Point3f})
 end
 
 """
+    points_near_ap_plane(pts, ref, ap_position; min_points=2, initial_thresh=40.0, growth=1.5, max_thresh=300.0)
+
+Cells within `initial_thresh` of the cross-sectional plane through
+`ref.origin + ap_position * ref.ap`, perpendicular to `ref.ap` (i.e.
+`|dot(p - ref.origin, ref.ap) - ap_position| < thresh`) -- a LOCAL slice at
+a specific point along the AP axis, not the whole point cloud. `ap_position`
+is a signed scalar offset from `ref.origin` along `ref.ap` (the same units
+as `dot(p - ref.origin, ref.ap)`), so evaluating this at many positions along
+the AP extent gives a genuinely varying (tapering near the ends of an ovoid
+embryo) cross-sectional profile rather than one constant body-wide radius.
+
+`initial_thresh=40` (widened from an initial `15`, which gave a visibly
+jagged radius profile -- adjacent 100-sample slices barely overlapped, so a
+single point entering/leaving a narrow window caused a sharp jump; measured
+directly: max sample-to-sample jump ~16-26 units at thresh=15 vs ~7-16 at
+thresh=40-45 across several frames). Wider slices trade a softer, less sharp
+taper right at the very tips for much smoother variation in between --
+consistent with a real ovoid body rather than sample noise. Callers should
+still pass a per-frame-adjusted `initial_thresh` (see
+[`adaptive_ap_plane_thresh`](@ref)) rather than this flat default, since a
+FIXED width is itself too narrow relative to how sparse early frames are
+(as few as 4 cells total at t=0) -- the same 40 units that works well once
+hundreds of cells exist is comparatively much sparser-sampled early on.
+
+Very early frames have only a handful of cells total (and slices near the
+AP extremes are inherently sparse even later), so the threshold grows (up to
+`max_thresh`) until at least `min_points` fall in the slice -- `min_points`
+defaults to just 2 (the minimum for a non-degenerate extent) rather than
+requiring a fuller sample, since demanding many points near a tapering tip
+would defeat the point of a local measurement.
+"""
+function points_near_ap_plane(pts, ref, ap_position::Real; min_points=2, initial_thresh=40.0, growth=1.5, max_thresh=300.0)
+    thresh = initial_thresh
+    local slice
+    while true
+        slice = filter(p -> abs(dot(p - ref.origin, ref.ap) - ap_position) < thresh, pts)
+        (length(slice) >= min_points || thresh > max_thresh) && break
+        thresh *= growth
+    end
+    return slice
+end
+
+"""
+    adaptive_ap_plane_thresh(n_cells, n_reference; base_thresh=40.0, power=0.2)
+
+Per-FRAME slice threshold for [`points_near_ap_plane`](@ref), scaled up as
+the total number of cells `n_cells` this frame falls short of `n_reference`
+(the final, densest frame's cell count) -- `base_thresh` already tuned to
+look good at `n_reference`. Uses a gentle `n^(-1/5)` power law (the same
+scaling Silverman's rule of thumb uses for kernel-density bandwidth
+selection, chosen for the same reason: density-based smoothing should widen
+slowly with sparsity, not linearly or as `1/sqrt(n)`, which overshoots badly
+at very low `n` -- e.g. only 4 cells at t=0). Confirmed numerically this
+keeps t=180-360 (hundreds of cells) close to the already-tuned 40-45 while
+softening t=0-90 (4-53 cells), where a flat 40 was comparatively too narrow
+(that frame's own cells are much sparser, so the same absolute width
+captures far fewer of them) and gave a jagged profile (max sample-to-sample
+jump ~15.5) that adaptive scaling reduces to ~7.
+"""
+adaptive_ap_plane_thresh(n_cells, n_reference; base_thresh=40.0, power=0.2) =
+    base_thresh * (n_reference / max(n_cells, 1))^power
+
+"""
+    smooth_radii(vecs::Vector{Vec3f}; window=9)
+
+Smooth the MAGNITUDE of each vector in `vecs` with a centered moving average
+over `window` samples (truncated at the ends, so the first/last points
+average over fewer neighbors rather than wrapping or padding with zeros),
+while leaving each vector's DIRECTION untouched -- i.e. this smooths the
+radius profile specifically, not the left-right orientation. Even after
+wider and adaptively-widened slices (see [`points_near_ap_plane`](@ref),
+[`adaptive_ap_plane_thresh`](@ref)), the 100 independently-measured local
+radii can still show sample-to-sample noise; this is an explicit smoothing
+pass on the resulting profile itself, on top of (not instead of) that
+spatial averaging.
+"""
+function smooth_radii(vecs::Vector{Vec3f}; window::Int=9)
+    n = length(vecs)
+    radii = norm.(vecs)
+    # Guard against a degenerate (near-zero-radius) vector at an exact tip --
+    # normalize would otherwise produce NaN, which propagates into the whole
+    # smoothed sequence via the sum below.
+    directions = [r > 1f-6 ? v / r : Vec3f(0, 0, 0) for (v, r) in zip(vecs, radii)]
+    half = window ÷ 2
+    smoothed = map(1:n) do j
+        lo = max(1, j - half)
+        hi = min(n, j + half)
+        sum(@view radii[lo:hi]) / (hi - lo + 1)
+    end
+    return [s * d for (s, d) in zip(smoothed, directions)]
+end
+
+"""
     tube_mesh(interp_curve, right_vecs)
 
 Build a `GeometryBasics.Mesh` tube around `interp_curve`: a circular cross
@@ -135,6 +228,11 @@ const T_END = series.frames[end].time
 # be a plain (non-Observable) array.
 lr_vertex_colors = reduce(vcat, [[c, c] for c in STATION_COLORS[mod1.(1:length(tracks), length(STATION_COLORS))]])
 
+# Reference cell count for adaptive_ap_plane_thresh: the final (densest)
+# frame's total cell count, since that's what the flat thresh=40 default was
+# tuned against.
+const N_CELLS_REFERENCE = length(get_pretwitch_points_at_time(pretwitch_df, series.frames[end].time))
+
 # Precompute all per-frame plot data.
 frame_data = map(1:length(series.frames)) do i
     frame = series.frames[i]
@@ -163,22 +261,37 @@ frame_data = map(1:length(series.frames)) do i
                    [Point3f((1 - w) * m + w * s) for (m, s) in zip(medial_samples, curve)]
 
     # Cross-section radius/orientation: blend, exactly like the curve itself,
-    # between an EARLY vector (half the whole point cloud's left-right extent,
-    # pointing in the fixed reference LR direction -- a constant-radius,
-    # non-twisting cylinder around the straight medial axis) and a LATE
-    # vector (the actual local left-right half-distance/direction at each
-    # terminal seam-cell pair, from right_vector_spline). Blending the full
-    # vector (not radius and direction separately) keeps this identical in
-    # spirit to how interp_curve itself blends full positions.
-    lr_projections = [dot(p - ref.origin, ref.lr) for p in all_pts]
-    lr_lo, lr_hi = extrema(lr_projections)
-    early_right_vec = Vec3f(((lr_hi - lr_lo) / 2) * ref.lr)
-    right_vecs = if isnothing(frame.right_vector_spline)
-        fill(early_right_vec, 100)
-    else
-        [Vec3f((1 - w) * early_right_vec + w * Vec3f(frame.right_vector_spline(x))) for x in range(0, 1, length=100)]
+    # between an EARLY vector and a LATE vector at each of the 100 sample
+    # positions.
+    #
+    # EARLY: half the left-right extent measured at a LOCAL cross-sectional
+    # slice through that sample's own AP position (not one fixed plane, and
+    # NOT the widest point anywhere along the whole body) -- so the resulting
+    # cylinder genuinely tapers near the head/tail, matching the real ovoid
+    # shape of the point cloud, instead of applying one constant radius
+    # everywhere.
+    #
+    # LATE: the actual local left-right half-distance/direction at each
+    # terminal seam-cell pair, from right_vector_spline.
+    #
+    # Blending the full vector (not radius and direction separately) keeps
+    # this identical in spirit to how interp_curve itself blends full
+    # positions.
+    adaptive_thresh = adaptive_ap_plane_thresh(length(all_pts), N_CELLS_REFERENCE)
+    early_right_vecs = map(range(0, 1, length=100)) do x
+        ap_position = lo + (hi - lo) * x
+        slice_pts = points_near_ap_plane(all_pts, ref, ap_position; initial_thresh=adaptive_thresh)
+        lr_projections = [dot(p - ref.origin, ref.lr) for p in slice_pts]
+        lr_lo, lr_hi = extrema(lr_projections)
+        Vec3f(((lr_hi - lr_lo) / 2) * ref.lr)
     end
-    surface = tube_mesh(interp_curve, right_vecs)
+    right_vecs = if isnothing(frame.right_vector_spline)
+        early_right_vecs
+    else
+        [Vec3f((1 - w) * erv + w * Vec3f(frame.right_vector_spline(x)))
+         for (erv, x) in zip(early_right_vecs, range(0, 1, length=100))]
+    end
+    surface = tube_mesh(interp_curve, smooth_radii(right_vecs))
 
     (t=frame.time, all_pts=all_pts, lr_segments=lr_segments, label_pts=label_pts, label_texts=label_texts,
      label_colors=label_colors, knots=frame.knot_positions,
