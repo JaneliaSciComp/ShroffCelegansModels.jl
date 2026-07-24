@@ -147,6 +147,18 @@ pairs, independent of terminal status).
 frame (no curve can be fit) -- true for frames 0-169 (~47% of the pretwitch
 window), where ZERO pairs have differentiated into a real seam cell yet.
 
+`right_vector_spline` is a natural spline (same `afTime` knots as
+`central_spline`, `nothing` under the same condition) through each terminal
+pair's own `(right - left)/2` vector -- i.e. evaluating it at a parameter `x`
+gives a vector whose norm is the local left-right half-distance (a radius)
+and whose direction is the local right-ward direction, exactly analogous to
+`build_celegans_model`'s posttwitch `right_vector_afTime`. Meant for building
+circular cross-sections around the central spline (radius + orientation in
+one fit, reusing the same linearity-of-spline-fitting property `build_model.jl`
+relies on: fitting the difference directly is identical to fitting left/right
+separately and subtracting, since natural cubic interpolation at fixed knot
+parameters is a linear map).
+
 `is_ap_monotonic` is a diagnostic ONLY: whether this frame's nominal knot
 order also happens to be spatially monotonic along the fixed AP reference
 axis. It does not affect the fit. `false` means the seam-cell ancestors
@@ -160,6 +172,7 @@ struct PretwitchCentralSplineFrame
     knot_positions::Vector{Point3f}
     afTime::Vector{Float64}
     central_spline::Union{Nothing,BSplineKit.SplineWrapper}
+    right_vector_spline::Union{Nothing,BSplineKit.SplineWrapper}
     pair_confidence::Vector{PairConfidence}
     is_ap_monotonic::Union{Missing,Bool}
 end
@@ -214,14 +227,18 @@ function central_spline_frame(tracks::Vector{PretwitchPairTrack}, i::Int, lr_w::
         afTime = Float64[0; cumsum(deltaLengths)]
         afTime ./= afTime[end]
         central_spline = _fit_central_spline(afTime, knot_positions)
+
+        right_vectors = [Vec3f((tracks[k].right[i] .- tracks[k].left[i]) ./ 2) for k in terminal_stations]
+        right_vector_spline = _fit_central_spline(afTime, right_vectors)
     else
         is_ap_monotonic = missing
         afTime = Float64[]
         central_spline = nothing
+        right_vector_spline = nothing
     end
 
     confidences = [pair_confidence(tracks[k], i, lr_w, max_abs_weight) for k in 1:n]
-    return PretwitchCentralSplineFrame(i - 1, terminal_stations, knot_positions, afTime, central_spline, confidences, is_ap_monotonic)
+    return PretwitchCentralSplineFrame(i - 1, terminal_stations, knot_positions, afTime, central_spline, right_vector_spline, confidences, is_ap_monotonic)
 end
 
 """

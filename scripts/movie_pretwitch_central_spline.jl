@@ -1,7 +1,7 @@
 using CairoMakie
 using ShroffCelegansModels
 using ShroffCelegansModels: get_pretwitch_df, get_pretwitch_points_at_time, build_pretwitch_central_spline_series,
-    pretwitch_reference_axes, Point3f, dot,
+    pretwitch_reference_axes, Point3f, Vec3f, dot, cross, normalize, norm,
     left_seam_cells, right_seam_cells
 
 # Verification movie for the pretwitch central spline (see
@@ -25,6 +25,12 @@ using ShroffCelegansModels: get_pretwitch_df, get_pretwitch_points_at_time, buil
 # count and whether THIS frame's nominal knot order also happens to be
 # spatially monotonic along that AP axis -- a diagnostic only, not something
 # that alters the fit.
+#
+# Renders two outputs via render_pretwitch_central_spline_movie (single
+# function, `show_surface` keyword toggles the body-surface tube mesh; the
+# expensive per-frame precomputation, including tube meshes, is shared
+# between both calls): pretwitch_central_spline.mp4 (curve-only, no surface)
+# and pretwitch_central_spline_with_surface.mp4 (includes the body surface).
 
 pretwitch_df = get_pretwitch_df()
 series = build_pretwitch_central_spline_series(pretwitch_df)
@@ -39,6 +45,45 @@ const STATION_COLORS = [:red, :orange, :gold, :green, :teal, :blue, :purple, :ma
 function sample_spline(frame; n=100)
     isnothing(frame.central_spline) && return Point3f[]
     return [Point3f(frame.central_spline(x)) for x in range(0, 1, length=n)]
+end
+
+"""
+    finite_diff_tangents(curve)
+
+Unit tangent at each point of `curve` via central differences (forward/
+backward at the endpoints) -- a simple numerical stand-in for an analytic
+derivative, adequate for orienting cross-section circles on the already-
+blended `interp_curve` (which has no single analytic spline of its own).
+"""
+function finite_diff_tangents(curve::Vector{Point3f})
+    n = length(curve)
+    map(1:n) do j
+        d = j == 1 ? curve[2] - curve[1] :
+            j == n ? curve[n] - curve[n-1] :
+            curve[j+1] - curve[j-1]
+        normalize(Vec3f(d))
+    end
+end
+
+"""
+    tube_mesh(interp_curve, right_vecs)
+
+Build a `GeometryBasics.Mesh` tube around `interp_curve`: a circular cross
+section at each sample point, oriented by the local tangent (finite
+differences, see [`finite_diff_tangents`](@ref)) and the local `right_vecs[j]`
+(already scaled to the desired radius -- see how `right_vec` is blended in
+the main per-frame loop below), exactly mirroring `build_celegans_model`'s
+posttwitch convention: `normal = normalize(cross(tangent, right)) * radius`,
+then `get_circle_points(right, normal, center)` for 32 points/ring, stitched
+into quads by the same `get_model_contour_mesh` posttwitch uses.
+"""
+function tube_mesh(interp_curve::Vector{Point3f}, right_vecs::Vector{Vec3f})
+    tangents = finite_diff_tangents(interp_curve)
+    sections = map(interp_curve, tangents, right_vecs) do center, tangent, rv
+        normal = normalize(cross(tangent, rv)) * norm(rv)
+        Point3f.(ShroffCelegansModels.get_circle_points(rv, normal, center))
+    end
+    return ShroffCelegansModels.get_model_contour_mesh(sections)
 end
 
 """
@@ -117,71 +162,118 @@ frame_data = map(1:length(series.frames)) do i
     interp_curve = isempty(curve) ? medial_samples :
                    [Point3f((1 - w) * m + w * s) for (m, s) in zip(medial_samples, curve)]
 
+    # Cross-section radius/orientation: blend, exactly like the curve itself,
+    # between an EARLY vector (half the whole point cloud's left-right extent,
+    # pointing in the fixed reference LR direction -- a constant-radius,
+    # non-twisting cylinder around the straight medial axis) and a LATE
+    # vector (the actual local left-right half-distance/direction at each
+    # terminal seam-cell pair, from right_vector_spline). Blending the full
+    # vector (not radius and direction separately) keeps this identical in
+    # spirit to how interp_curve itself blends full positions.
+    lr_projections = [dot(p - ref.origin, ref.lr) for p in all_pts]
+    lr_lo, lr_hi = extrema(lr_projections)
+    early_right_vec = Vec3f(((lr_hi - lr_lo) / 2) * ref.lr)
+    right_vecs = if isnothing(frame.right_vector_spline)
+        fill(early_right_vec, 100)
+    else
+        [Vec3f((1 - w) * early_right_vec + w * Vec3f(frame.right_vector_spline(x))) for x in range(0, 1, length=100)]
+    end
+    surface = tube_mesh(interp_curve, right_vecs)
+
     (t=frame.time, all_pts=all_pts, lr_segments=lr_segments, label_pts=label_pts, label_texts=label_texts,
      label_colors=label_colors, knots=frame.knot_positions,
      curve=curve, n_terminal=length(frame.terminal_stations),
-     ap_line=ap_line, interp_curve=interp_curve, is_ap_monotonic=frame.is_ap_monotonic)
+     ap_line=ap_line, interp_curve=interp_curve, surface=surface, is_ap_monotonic=frame.is_ap_monotonic)
 end
 
-fig = Figure(size=(1300, 800))
-ax = Axis3(fig[1, 1], title="pretwitch central spline", aspect=:data,
-    limits=(50, 350, 20, 220, 40, 240))
-
-all_pts_obs = Observable(frame_data[1].all_pts)
-lr_segments_obs = Observable(frame_data[1].lr_segments)
-label_pts_obs = Observable(frame_data[1].label_pts)
-label_texts_obs = Observable(frame_data[1].label_texts)
-label_colors_obs = Observable(frame_data[1].label_colors)
-knots_obs = Observable(frame_data[1].knots)
-curve_obs = Observable(frame_data[1].curve)
-ap_line_obs = Observable(frame_data[1].ap_line)
-interp_curve_obs = Observable(frame_data[1].interp_curve)
-
-# Background layer (drawn first, so the highlighted seam-cell points/labels
-# render on top of it): every other pretwitch cell at this frame, for context.
-scatter!(ax, all_pts_obs, color=(:gray, 0.35), markersize=5)
-linesegments!(ax, lr_segments_obs, color=lr_vertex_colors, linewidth=2)
-scatter!(ax, label_pts_obs, color=label_colors_obs, marker=:circle, markersize=16, strokecolor=:black, strokewidth=1)
-text!(ax, label_pts_obs; text=label_texts_obs, fontsize=11, align=(:left, :bottom), offset=(6, 6))
-scatter!(ax, knots_obs, color=:black, marker=:star5, markersize=22, strokecolor=:white, strokewidth=1)
-lines!(ax, curve_obs, color=:black, linewidth=3)
-lines!(ax, ap_line_obs, color=:red, linewidth=3, linestyle=:dash)
-lines!(ax, interp_curve_obs, color=:dodgerblue, linewidth=4)
-
-Legend(fig[1, 2],
-    [MarkerElement(color=(:gray, 0.35), marker=:circle, markersize=10),
-     MarkerElement(color=:gray, marker=:circle, markersize=14),
-     LineElement(color=:gray, linewidth=2), MarkerElement(color=:black, marker=:star5, markersize=18),
-     LineElement(color=:black, linewidth=3), LineElement(color=:red, linewidth=3, linestyle=:dash),
-     LineElement(color=:dodgerblue, linewidth=4)],
-    ["other pretwitch cells (context)",
-     "distinct ancestor cell: \"name (descendant seam cells)\" (color = station of first descendant, H0..T)",
-     "L–R pair connector (color = station, H0..T)", "spline knot (terminal seam cell, fixed nominal order)",
-     "fitted central spline (terminal seam cells only)", "medial axis (Approach 1 AP direction, spanning full point cloud)",
-     "interpolated curve (medial axis at t=$(T_START) -> spline at t=$(T_END), linear blend)"],
-    "Legend")
-
 title_str(d) = "t=$(d.t)  terminal stations: $(d.n_terminal)/10  spatially AP-monotonic: $(d.is_ap_monotonic)"
-title_obs = Observable(title_str(frame_data[1]))
-Label(fig[0, 1:2], title_obs, fontsize=20, tellwidth=false)
+
+"""
+    render_pretwitch_central_spline_movie(frame_data; show_surface=true, outpath, snapshot_indices=Set{Int}())
+
+Render the pretwitch central-spline verification movie from precomputed
+`frame_data`. `show_surface` toggles the body-surface tube mesh (see
+[`tube_mesh`](@ref)) on or off -- everything else (background cells, L/R
+connectors, ancestor labels, fitted spline, medial axis, interpolated curve)
+is always shown. Set `show_surface=false` for a lighter-weight, curve-only
+view when the surface itself isn't the point.
+"""
+function render_pretwitch_central_spline_movie(frame_data; show_surface::Bool=true, outpath, snapshot_indices=Set{Int}())
+    fig = Figure(size=(1300, 800))
+    ax = Axis3(fig[1, 1], title="pretwitch central spline", aspect=:data,
+        limits=(50, 350, 20, 220, 40, 240))
+
+    all_pts_obs = Observable(frame_data[1].all_pts)
+    lr_segments_obs = Observable(frame_data[1].lr_segments)
+    label_pts_obs = Observable(frame_data[1].label_pts)
+    label_texts_obs = Observable(frame_data[1].label_texts)
+    label_colors_obs = Observable(frame_data[1].label_colors)
+    knots_obs = Observable(frame_data[1].knots)
+    curve_obs = Observable(frame_data[1].curve)
+    ap_line_obs = Observable(frame_data[1].ap_line)
+    interp_curve_obs = Observable(frame_data[1].interp_curve)
+
+    # Background layer (drawn first, so the highlighted seam-cell points/labels
+    # render on top of it): every other pretwitch cell at this frame, for context.
+    scatter!(ax, all_pts_obs, color=(:gray, 0.35), markersize=5)
+    surface_obs = nothing
+    if show_surface
+        surface_obs = Observable(frame_data[1].surface)
+        mesh!(ax, surface_obs, color=(:skyblue, 0.25), transparency=true)
+    end
+    linesegments!(ax, lr_segments_obs, color=lr_vertex_colors, linewidth=2)
+    scatter!(ax, label_pts_obs, color=label_colors_obs, marker=:circle, markersize=16, strokecolor=:black, strokewidth=1)
+    text!(ax, label_pts_obs; text=label_texts_obs, fontsize=11, align=(:left, :bottom), offset=(6, 6))
+    scatter!(ax, knots_obs, color=:black, marker=:star5, markersize=22, strokecolor=:white, strokewidth=1)
+    lines!(ax, curve_obs, color=:black, linewidth=3)
+    lines!(ax, ap_line_obs, color=:red, linewidth=3, linestyle=:dash)
+    lines!(ax, interp_curve_obs, color=:dodgerblue, linewidth=4)
+
+    legend_elements = Any[MarkerElement(color=(:gray, 0.35), marker=:circle, markersize=10)]
+    legend_labels = String["other pretwitch cells (context)"]
+    if show_surface
+        push!(legend_elements, PolyElement(color=(:skyblue, 0.25)))
+        push!(legend_labels, "body surface (circular cross-sections around interpolated curve)")
+    end
+    append!(legend_elements, [
+        MarkerElement(color=:gray, marker=:circle, markersize=14),
+        LineElement(color=:gray, linewidth=2), MarkerElement(color=:black, marker=:star5, markersize=18),
+        LineElement(color=:black, linewidth=3), LineElement(color=:red, linewidth=3, linestyle=:dash),
+        LineElement(color=:dodgerblue, linewidth=4)])
+    append!(legend_labels, [
+        "distinct ancestor cell: \"name (descendant seam cells)\" (color = station of first descendant, H0..T)",
+        "L–R pair connector (color = station, H0..T)", "spline knot (terminal seam cell, fixed nominal order)",
+        "fitted central spline (terminal seam cells only)", "medial axis (Approach 1 AP direction, spanning full point cloud)",
+        "interpolated curve (medial axis at t=$(T_START) -> spline at t=$(T_END), linear blend)"])
+    Legend(fig[1, 2], legend_elements, legend_labels, "Legend")
+
+    title_obs = Observable(title_str(frame_data[1]))
+    Label(fig[0, 1:2], title_obs, fontsize=20, tellwidth=false)
+
+    snapshot_prefix = splitext(outpath)[1]
+    record(fig, outpath, eachindex(frame_data); framerate=24) do i
+        d = frame_data[i]
+        all_pts_obs[] = d.all_pts
+        lr_segments_obs[] = d.lr_segments
+        label_pts_obs[] = d.label_pts
+        label_texts_obs[] = d.label_texts
+        label_colors_obs[] = d.label_colors
+        knots_obs[] = d.knots
+        curve_obs[] = d.curve
+        ap_line_obs[] = d.ap_line
+        interp_curve_obs[] = d.interp_curve
+        show_surface && (surface_obs[] = d.surface)
+        title_obs[] = title_str(d)
+        if i in snapshot_indices
+            save("$(snapshot_prefix)_frame$(lpad(i, 3, '0')).png", fig)
+        end
+    end
+    println("wrote $outpath")
+end
 
 snapshot_indices = Set([1, 31, 91, 151, 181, 271, 361])
 
-outpath = joinpath(@__DIR__, "..", "pretwitch_central_spline.mp4")
-record(fig, outpath, eachindex(frame_data); framerate=24) do i
-    d = frame_data[i]
-    all_pts_obs[] = d.all_pts
-    lr_segments_obs[] = d.lr_segments
-    label_pts_obs[] = d.label_pts
-    label_texts_obs[] = d.label_texts
-    label_colors_obs[] = d.label_colors
-    knots_obs[] = d.knots
-    curve_obs[] = d.curve
-    ap_line_obs[] = d.ap_line
-    interp_curve_obs[] = d.interp_curve
-    title_obs[] = title_str(d)
-    if i in snapshot_indices
-        save(joinpath(@__DIR__, "..", "pretwitch_central_spline_frame$(lpad(i, 3, '0')).png"), fig)
-    end
-end
-println("wrote $outpath")
+render_pretwitch_central_spline_movie(frame_data; show_surface=false,
+    outpath=joinpath(@__DIR__, "..", "pretwitch_central_spline.mp4"))
+render_pretwitch_central_spline_movie(frame_data; show_surface=true,
+    outpath=joinpath(@__DIR__, "..", "pretwitch_central_spline_with_surface.mp4"), snapshot_indices)
