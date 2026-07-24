@@ -86,6 +86,7 @@ module ShroffCelegansModels
     # build the combined pretwitch+posttwitch dataframe for the pipeline.
     include("seam_cell_to_lineage_map.jl")
     include("demo_averaging/pretwitch_orientation.jl")
+    include("demo_averaging/pretwitch_straighten.jl")
     include("demo_averaging/explicit_export.jl")
     include("recompute_pipeline.jl")
     include("makie.jl")

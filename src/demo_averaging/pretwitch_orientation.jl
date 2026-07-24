@@ -92,7 +92,9 @@ for `"Cpaaaa"`, the chain is `"C"`, `"Cp"`, `"Cpa"`, `"Cpaa"`, `"Cpaaa"`,
 [`pretwitch_cells_by_name`](@ref). Ancestor prefixes not present as their own
 distinct name in `grouped` (division doesn't always add exactly one
 character in a way that leaves every prefix separately observed) are simply
-skipped. Returns `(times, points)` sorted by time.
+skipped. Returns `(times, points, ancestor_names)` sorted by time, where
+`ancestor_names[i]` is the ancestor prefix that produced `points[i]` (which
+ancestor was "active" at `times[i]`).
 
 This is what "working back from" a cell like Cpaaaa (identified in the
 posttwitch lattice orientation QC, see `lattice_orientation.jl`) to the
@@ -100,13 +102,17 @@ pretwitch stage means concretely: its full ancestry, not just the single
 frame where `target_name` itself first appears.
 """
 function pretwitch_lineage_track(target_name::AbstractString, grouped::AbstractDict{String})
-    track = Tuple{Int,Point3f}[]
+    track = Tuple{Int,Point3f,String}[]
     for k in 1:length(target_name)
         prefix = target_name[1:k]
-        haskey(grouped, prefix) && append!(track, grouped[prefix])
+        if haskey(grouped, prefix)
+            for (t, p) in grouped[prefix]
+                push!(track, (t, p, prefix))
+            end
+        end
     end
     sort!(track, by=first)
-    return first.(track), last.(track)
+    return first.(track), getindex.(track, 2), getindex.(track, 3)
 end
 
 """
