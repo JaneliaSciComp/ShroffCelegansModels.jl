@@ -163,4 +163,13 @@ data:
             proxy_set_header Host $host;
             proxy_read_timeout 600s;
         }
+
+        location /lattice_orientation/ {
+            proxy_pass http://localhost:9401/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_read_timeout 600s;
+        }
     }

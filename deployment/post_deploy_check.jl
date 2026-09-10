@@ -48,6 +48,7 @@ const ENDPOINTS = [
     ("debug_annotation_ap_axis_retrack_live", "/debug_annotation_ap_axis_retrack_live/"),
     ("zscore_analysis",                       "/zscore_analysis/"),
     ("modified_times",                        "/modified_times/"),
+    ("lattice_orientation",                   "/lattice_orientation/"),
     ("fix_annotation_ap_axis",                "/fix_annotation_ap_axis/"),
 ]
 

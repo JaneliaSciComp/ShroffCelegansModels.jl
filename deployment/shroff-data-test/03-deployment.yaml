@@ -367,6 +367,38 @@ spec:
             failureThreshold: 10
             periodSeconds: 30
 
+        - name: lattice-orientation
+          image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
+          command:
+            - julia
+            - --threads=auto
+            - --project=/app/ShroffCelegansModels.jl/web
+            - /app/ShroffCelegansModels.jl/web/scripts/web_lattice_orientation.jl
+          ports:
+            - containerPort: 9401
+          workingDir: /app/ShroffCelegansModels.jl
+          env:
+            - name: SHROFF_HOST
+              value: "shroff-data-test.int.janelia.org"
+            - name: LATTICE_ORIENTATION_DIR
+              value: /data/annotations/lattice_orientation
+          volumeMounts:
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+          startupProbe:
+            tcpSocket:
+              port: 9401
+            failureThreshold: 10
+            periodSeconds: 30
+
         - name: fix-ap-axis
           image: image-registry.openshift-image-registry.svc:5000/shroff-data-test/shroff-data-test:latest
           command:
