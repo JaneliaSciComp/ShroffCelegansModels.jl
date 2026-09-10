@@ -47,7 +47,10 @@ function annotation_changes_pending()
     return mtime(changes) > maximum(mtime, outputs)
 end
 
-function _generate_pipeline_visualizations(h5_path::AbstractString)
+function _generate_pipeline_visualizations(
+    h5_path::AbstractString,
+    unsmoothed_h5_path::Union{Nothing, AbstractString} = nothing,
+)
     output_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
     pipeline_run = Dates.format(Dates.unix2datetime(mtime(h5_path)), "yyyy-mm-ddTHH:MM:SS")
     avg_dict = ShroffCelegansModels.load_latest_average_annotations(
@@ -74,6 +77,30 @@ function _generate_pipeline_visualizations(h5_path::AbstractString)
             @info "Combined movie written" view movie_path
         catch err
             @warn "Combined movie generation failed (other outputs still valid)" view err
+        end
+    end
+
+    # Unsmoothed track: same movies, generated from the unsmoothed HDF5, for
+    # QA/debug comparison against the smoothed movies above. Best-effort — a
+    # failure here must never affect the smoothed outputs.
+    if unsmoothed_h5_path !== nothing
+        try
+            unsmoothed_avg_dict = ShroffCelegansModels.load_latest_average_annotations(
+                default_filename = basename(unsmoothed_h5_path),
+                dir = dirname(unsmoothed_h5_path),
+            )
+            for view in (:yz, :xz)
+                movie_path = joinpath(output_dir, "unsmoothed_movie_$(view).mp4")
+                generate_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+                @info "Unsmoothed movie written" view movie_path
+            end
+            for view in (:yz, :xz)
+                movie_path = joinpath(output_dir, "unsmoothed_combined_movie_$(view).mp4")
+                generate_combined_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+                @info "Unsmoothed combined movie written" view movie_path
+            end
+        catch err
+            @warn "Unsmoothed movie generation failed (smoothed outputs still valid)" err
         end
     end
 
@@ -113,7 +140,7 @@ function run_pipeline(marker)
     @info "Pipeline produced artifacts" result
 
     try
-        _generate_pipeline_visualizations(result.h5_path)
+        _generate_pipeline_visualizations(result.h5_path, result.unsmoothed_h5_path)
     catch err
         @warn "Visualization generation failed (pipeline outputs still valid)" err
     end

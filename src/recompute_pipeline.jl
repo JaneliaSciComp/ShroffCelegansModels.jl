@@ -18,6 +18,11 @@ Orchestrates the user's 6-step workflow:
   8. Build an intermediate `_for_ben.csv`, then write the explicit-schema
      deliverables (`pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`,
      `combined_<ts>.csv`) and delete the intermediates.
+  9. Repeat steps 7-8 for the pre-smoothing (`unsmoothed`) averaged
+     annotations, writing `edited_unsmoothed_average_annotations_<ts>.h5` and
+     `unsmoothed_{pretwitch,posttwitch,combined}_<ts>.csv` — a QA/debug track
+     kept alongside the smoothed deliverables. Best-effort: failures here
+     never affect the smoothed outputs above.
 
 The function takes no required arguments — it reads its configuration from env
 vars / package defaults — so an LSF wrapper could invoke it identically once
@@ -316,6 +321,46 @@ function run_recompute_pipeline(;
         end
     end
 
+    # 7u-8u/8. Unsmoothed track: `avg_dict` (pre-6.5, already carries seam
+    #     cells from 6.25) written to its own HDF5, plus the same explicit-CSV
+    #     export as the smoothed deliverable above, marked with an
+    #     `unsmoothed` prefix — for QA/debug comparison against the smoothed
+    #     production outputs. Entirely best-effort: any failure here must
+    #     never affect the smoothed/production deliverables already written.
+    unsmoothed_h5_path = joinpath(output_dir, "edited_unsmoothed_average_annotations_$(ts).h5")
+    unsmoothed_explicit_paths = _phase("7u-8u/8 unsmoothed_export") do
+        try
+            @info "[7u/8] Writing unsmoothed averaged HDF5" unsmoothed_h5_path
+            ShroffCelegansModels.save_average_annotations(avg_dict; filename = unsmoothed_h5_path)
+
+            unsmoothed_ben_csv = replace(unsmoothed_h5_path, ".h5" => "_for_ben.csv")
+            @info "[8u/8] Building intermediate unsmoothed _for_ben CSV" unsmoothed_ben_csv
+            ShroffCelegansModels.resave_for_ben(unsmoothed_h5_path; target_filename = unsmoothed_ben_csv,
+                time_range = (381, 751), canonicalize_cell_names = true)
+
+            res = ShroffCelegansModels.write_combined_explicit_csvs(;
+                output_dir = output_dir,
+                avg_models = avg_models,
+                ben_csv_path = unsmoothed_ben_csv,
+                prefix = "unsmoothed",
+                date_str = ts,
+                add_unsmoothed_seam_cells = false,
+            )
+            @info "[8u/8] Wrote unsmoothed pretwitch/posttwitch/combined CSVs" res.pretwitch_path res.posttwitch_path res.combined_path
+
+            for f in (unsmoothed_ben_csv,
+                      replace(unsmoothed_ben_csv, ".csv" => "_ryan_duplicates.csv"),
+                      replace(unsmoothed_ben_csv, ".csv" => "_ryan_stats.csv"))
+                isfile(f) && rm(f; force=true)
+            end
+
+            return (; res.pretwitch_path, res.posttwitch_path, res.combined_path)
+        catch err
+            @warn "Unsmoothed export failed (smoothed pipeline outputs still valid)" err
+            return nothing
+        end
+    end
+
     # Persist the in-memory caches so future package boots (interactive
     # sessions, web service restarts) load the freshly-recomputed data
     # instead of the stale snapshots baked into the container image.
@@ -357,8 +402,8 @@ function run_recompute_pipeline(;
         @warn "Could not remove checkpoint dir after success" checkpoint_dir err
     end
 
-    @info "Pipeline complete" h5_path explicit_paths n_changes n_timepoints phase_timings
-    return (; h5_path, explicit_paths, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
+    @info "Pipeline complete" h5_path explicit_paths unsmoothed_h5_path unsmoothed_explicit_paths n_changes n_timepoints phase_timings
+    return (; h5_path, explicit_paths, unsmoothed_h5_path, unsmoothed_explicit_paths, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
 end
 
 # Sweep dated top-level outputs into `archive_<ts>/`, where `<ts>` is the
