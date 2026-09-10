@@ -1,0 +1,96 @@
+# On-demand regeneration of the recompute pipeline's *display/export* artifacts
+# only (movies, meshscatter HTML, explicit CSVs, index) from the already-averaged
+# HDF5 — WITHOUT re-running the ~hours-long averaging. Use this after a fix that
+# changes only the display/export code paths (e.g. the LR/DV axis flip), where
+# the averaged HDF5 is unchanged and a full recompute would be wasteful.
+#
+# This CronJob is SUSPENDED (`suspend: true`) — it never fires on its own. It
+# exists purely as a reusable template you trigger by hand, the same idiom as the
+# recompute pipeline (see notes/trigger-recompute-pipeline.md and
+# notes/regenerate-viz-only.md):
+#
+#     OC=deployment/.pixi/envs/default/bin/oc
+#     NS=shroff-data
+#     $OC apply -f deployment/shroff-data/11-cronjob-regenerate-viz.yaml -n $NS
+#     $OC create job -n $NS --from=cronjob/regenerate-viz regenerate-viz-$(date +%Y%m%d%H%M)
+#
+# It runs web/scripts/regenerate_viz_only.jl, which reuses the pipeline's own viz
+# routine (`_generate_pipeline_visualizations`) plus steps 8/8a for the CSVs.
+#
+# Unlike the recompute CronJob, no `pending_recompute` marker is involved — this
+# bypasses the conditional pipeline entry point and always regenerates. Before
+# triggering, confirm no `recompute-on-mtime-change-*` pod is running, since both
+# write into /data/annotations/recompute/.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: regenerate-viz
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+    component: regenerate-viz
+spec:
+  # Suspended: the schedule is never honored; jobs are created manually with
+  # `oc create job --from=cronjob/regenerate-viz`.
+  suspend: true
+  schedule: "0 4 * * *"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Viz-only is minutes, not hours, but keep a generous ceiling for the
+      # four CairoMakie movie renders. 2h is ample.
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: shroff-data
+            component: regenerate-viz
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: regenerate-viz
+              image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+              command:
+                - julia
+                # Movie renders are single-threaded (CairoMakie), but the CSV
+                # export's avg_models load benefits from a few threads; match the
+                # recompute CronJob's pinning rather than --threads=auto (which
+                # mis-detects the cgroup budget).
+                - --threads=16
+                - --project=/app/ShroffCelegansModels.jl/web
+                - /app/ShroffCelegansModels.jl/web/scripts/regenerate_viz_only.jl
+              workingDir: /app/ShroffCelegansModels.jl
+              env:
+                - name: RECOMPUTE_OUTPUT_DIR
+                  value: /data/annotations/recompute
+                # Only used for logging + which avg_models_n<N>.h5 to expect;
+                # the newest avg_models_n*.h5 is loaded by mtime regardless.
+                - name: N_TIMEPOINTS
+                  value: "371"
+              volumeMounts:
+                - name: nearline
+                  mountPath: /nearline/shroff
+                  readOnly: true
+                # annotations MUST be read-write: the script rewrites the movies,
+                # HTML, CSVs, and index under /data/annotations/recompute/.
+                - name: annotations
+                  mountPath: /data/annotations
+              resources:
+                requests:
+                  memory: 8Gi
+                  cpu: "4"
+                limits:
+                  memory: 32Gi
+                  cpu: "16"
+          volumes:
+            - name: nearline
+              persistentVolumeClaim:
+                claimName: shroff-data-nearline
+            - name: annotations
+              persistentVolumeClaim:
+                claimName: shroff-data-annotations

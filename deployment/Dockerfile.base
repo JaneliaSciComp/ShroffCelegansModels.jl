@@ -12,10 +12,15 @@ COPY Project.toml    /app/ShroffCelegansModels.jl/
 COPY web/Project.toml    /app/ShroffCelegansModels.jl/web/
 COPY glmakie/Project.toml /app/ShroffCelegansModels.jl/glmakie/
 
-# Stub the local package so external deps can be precompiled without full source
+# Stub the local packages so external deps can be precompiled without full
+# source. Both the core package and the web-interface package (web/ is now a
+# package) need a source file present for Pkg to resolve them.
 RUN mkdir -p /app/ShroffCelegansModels.jl/src && \
     printf 'module ShroffCelegansModels\nend\n' \
-      > /app/ShroffCelegansModels.jl/src/ShroffCelegansModels.jl
+      > /app/ShroffCelegansModels.jl/src/ShroffCelegansModels.jl && \
+    mkdir -p /app/ShroffCelegansModels.jl/web/src && \
+    printf 'module ShroffCelegansModelsWebInterface\nend\n' \
+      > /app/ShroffCelegansModels.jl/web/src/ShroffCelegansModelsWebInterface.jl
 
 RUN julia --threads=auto --project=/app/ShroffCelegansModels.jl/web \
     -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'

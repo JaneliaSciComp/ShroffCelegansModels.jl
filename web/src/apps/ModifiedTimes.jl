@@ -1,0 +1,233 @@
+"""
+    ModifiedTimes
+
+Submodule for the modified-times status page (deployment container
+`modified-times`, port 9400). Pure Bonito DOM — no Makie. Reads
+`modified_times.h5` (written by the save-modified-times CronJob) and renders a
+nested, highlighted view of per-dataset/per-timepoint file mtimes.
+
+The precompile workload renders a tiny synthetic tree through
+`Bonito.export_static`, caching the DOM-serialize path with no disk dependency
+(the only asset is an in-tree `web/static/style.css` plus a CDN URL).
+"""
+module ModifiedTimes
+
+using Bonito
+using Bonito: Asset
+using HDF5: h5open, attrs
+using Dates: unix2datetime, format as date_format
+using PrecompileTools: @setup_workload, @compile_workload
+using Preferences: @load_preference
+
+const PORT = 9400
+
+# --- theme assets (moved from web/scripts/web_theme.jl) ------------------------
+# pico.css v2 (classless, dark/light auto) from CDN + a small local override.
+const PICO_CSS = Asset("https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css")
+const SHROFF_CSS = Asset(joinpath(@__DIR__, "..", "..", "static", "style.css"))
+theme_assets() = (PICO_CSS, SHROFF_CSS)
+
+modified_times_path() = joinpath(
+    get(ENV, "MODIFIED_TIMES_DIR", "/data/annotations/modified_times"),
+    "modified_times.h5",
+)
+
+struct DatasetEntry
+    index::Int
+    path::String
+    cell_key_name::String
+    start::Int
+    stop::Int
+    outliers::Vector{Int}
+    mtimes::Vector{Float64}
+end
+
+function read_modified_times(path::AbstractString)
+    h5open(path, "r") do f
+        kind_names = filter(k -> haskey(f, k), ["annotation", "lattice"])
+        if isempty(kind_names)
+            return Dict("annotation" => _read_kind(f))
+        end
+        return Dict{String, Dict{String, Vector{DatasetEntry}}}(
+            k => _read_kind(f[k]) for k in kind_names
+        )
+    end
+end
+
+function _read_kind(root)
+    groups = Dict{String, Vector{DatasetEntry}}()
+    for group_name in keys(root)
+        g = root[group_name]
+        indices = sort(parse.(Int, collect(keys(g))))
+        entries = map(indices) do i
+            ds = g[string(i)]
+            A = attrs(ds)
+            DatasetEntry(
+                i,
+                string(A["path"]),
+                string(A["cell_key.name"]),
+                Int(A["cell_key.start"]),
+                Int(A["cell_key.end"]),
+                Int.(A["cell_key.outliers"]),
+                Float64.(read(ds)),
+            )
+        end
+        groups[group_name] = entries
+    end
+    return groups
+end
+
+format_unix(u::Real) = isnan(u) ? "" : date_format(unix2datetime(u), "yyyy-mm-dd HH:MM:SS")
+
+dataset_max(d::DatasetEntry) = (v = filter(!isnan, d.mtimes); isempty(v) ? -Inf : maximum(v))
+
+function last_modified(mtimes::Vector{Float64})
+    valid = filter(!isnan, mtimes)
+    isempty(valid) ? "n/a" : format_unix(maximum(valid))
+end
+
+# Indices whose value equals the (finite) maximum of `xs`. Empty if all NaN.
+function argmax_finite(xs::Vector{Float64})
+    valid = filter(!isnan, xs)
+    isempty(valid) && return Int[]
+    m = maximum(valid)
+    return findall(x -> !isnan(x) && x == m, xs)
+end
+
+const HIGHLIGHT_CLASS = "shroff-highlight"
+
+function render_kinds(kinds::Dict{String, Dict{String, Vector{DatasetEntry}}}, source_mtime::Float64)
+    sorted_kinds = sort(collect(keys(kinds)))
+    DOM.main(
+        theme_assets()...,
+        DOM.h2("Modified times"),
+        DOM.p(
+            "Source: ", DOM.code(modified_times_path()),
+            " (file mtime: ", format_unix(source_mtime), ")",
+        ),
+        map(sorted_kinds) do kind
+            DOM.section(
+                DOM.h3(uppercasefirst(kind)),
+                render_kind(kinds[kind]),
+            )
+        end...,
+        ; class="shroff-mtime container",
+    )
+end
+
+function render_kind(groups::Dict{String, Vector{DatasetEntry}})
+    sorted_names = sort(collect(keys(groups)))
+    group_maxes = Dict(name => let
+        ms = dataset_max.(groups[name])
+        isempty(ms) ? -Inf : maximum(ms)
+    end for name in sorted_names)
+    global_max = isempty(group_maxes) ? -Inf : maximum(values(group_maxes))
+    DOM.div(map(sorted_names) do group_name
+        datasets = groups[group_name]
+        ds_maxes = dataset_max.(datasets)
+        group_max = group_maxes[group_name]
+        hot_datasets = Set(findall(==(group_max), ds_maxes))
+        group_last = group_max == -Inf ? "n/a" : format_unix(group_max)
+        group_class = group_max == global_max ? HIGHLIGHT_CLASS : ""
+        DOM.details(
+            DOM.summary(
+                DOM.strong(group_name),
+                " — ", string(length(datasets)), " datasets",
+                " — last modified: ", group_last,
+                ; class=group_class,
+            ),
+            DOM.ul(map(enumerate(datasets)) do (ds_i, d)
+                hot_tps = Set(argmax_finite(d.mtimes))
+                dataset_class = ds_i in hot_datasets ? HIGHLIGHT_CLASS : ""
+                DOM.li(DOM.details(
+                    DOM.summary(
+                        "[", string(d.index), "] ",
+                        DOM.code(d.cell_key_name),
+                        " — last modified: ", last_modified(d.mtimes),
+                        ; class=dataset_class,
+                    ),
+                    DOM.div("path: ", DOM.code(d.path)),
+                    DOM.div(
+                        "timepoints: ", string(d.start), "–", string(d.stop),
+                        ", outliers: ", isempty(d.outliers) ? "none" : join(d.outliers, ", "),
+                    ),
+                    DOM.ul(map(eachindex(d.mtimes)) do i
+                        tp = d.start + i - 1
+                        u = d.mtimes[i]
+                        label = if isnan(u)
+                            tp in d.outliers ? "outlier" : "missing"
+                        else
+                            format_unix(u)
+                        end
+                        tp_class = i in hot_tps ? HIGHLIGHT_CLASS : ""
+                        DOM.li("t=", string(tp), ": ", label; class=tp_class)
+                    end),
+                ))
+            end),
+        )
+    end...)
+end
+
+function render_missing(path::AbstractString)
+    DOM.div(
+        DOM.h2("Modified times"),
+        DOM.p("No data yet. Expected ", DOM.code(path), " but it does not exist."),
+        DOM.p("This file is generated by the save-modified-times CronJob."),
+    )
+end
+
+function web_modified_times()
+    server = Server(
+        "0.0.0.0", PORT;
+        proxy_url="https://$(get(ENV, "SHROFF_HOST", "shroff-data.int.janelia.org"))/modified_times/",
+    )
+    route!(server, "/" => App(; title="Shroff C. elegans modified times") do
+        path = modified_times_path()
+        if !isfile(path)
+            return render_missing(path)
+        end
+        kinds = read_modified_times(path)
+        return render_kinds(kinds, Float64(mtime(path)))
+    end)
+    return server
+end
+
+function main()
+    server = web_modified_times()
+    @info "Listening" port=PORT
+    if isinteractive()
+        println("Press enter to quit")
+        readline()
+    else
+        wait(server)
+    end
+end
+
+# --- precompile workload -------------------------------------------------------
+
+function _synthetic_kinds()
+    mk(i) = DatasetEntry(i, "/nearline/shroff/example/Pos$i/RegB", "cellkey$i", 1, 3,
+        Int[], Float64[1.7e9, NaN, 1.7e9 + 60])
+    Dict{String, Dict{String, Vector{DatasetEntry}}}(
+        "annotation" => Dict("RW10000" => [mk(0), mk(1)]),
+        "lattice"    => Dict("RW10000" => [mk(0)]),
+    )
+end
+
+if @load_preference("precompile_workload", true)
+@setup_workload begin
+    kinds = _synthetic_kinds()
+    @compile_workload begin
+        try
+            app = App(() -> render_kinds(kinds, 1.7e9))
+            mktempdir() do dir
+                export_static(joinpath(dir, "modified_times.html"), app)
+            end
+        catch err
+            @debug "ModifiedTimes precompile workload skipped" exception = (err, catch_backtrace())
+        end
+    end
+end
+end  # precompile_workload preference guard
+
+end # module ModifiedTimes

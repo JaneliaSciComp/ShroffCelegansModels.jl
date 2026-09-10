@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "eb6bd469e678eaf446b9d78878432892291b977a"
+project_hash = "299856f77cce50a4b466d115120c9cf5d8dd596a"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1585,6 +1585,12 @@ deps = ["BSplineKit", "CSV", "ColorSchemes", "Colors", "CoordinateTransformation
 path = "."
 uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
 version = "1.0.0-DEV"
+
+[[deps.ShroffCelegansModelsWebInterface]]
+deps = ["Base64", "Bonito", "CairoMakie", "ColorTypes", "DataFrames", "Dates", "GeometryBasics", "HDF5", "HTTP", "Makie", "MbedTLS", "OpenSSL", "PrecompileTools", "Preferences", "Printf", "Revise", "ShroffCelegansModels", "ThinPlateSplines", "URIs", "VideoIO", "WGLMakie"]
+path = "web"
+uuid = "dcb3a74b-ea76-41f5-b606-4c6e28c38160"
+version = "0.1.0"
 
 [[deps.SignedDistanceFields]]
 deps = ["Statistics"]
