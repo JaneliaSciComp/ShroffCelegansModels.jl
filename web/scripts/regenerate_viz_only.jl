@@ -21,9 +21,16 @@ When the run also produced the unsmoothed track (newest
   - `unsmoothed_movie_{yz,xz}.mp4`, `unsmoothed_combined_movie_{yz,xz}.mp4`
   - `unsmoothed_{pretwitch,posttwitch,combined}_<ts>.csv`
 
-Set `REGEN_VIZ=0 REGEN_CSVS=0` to rebuild **only** the unsmoothed movies —
-useful after a fix that affected just that track (each 371-frame movie takes
-~20 min, so skipping the smoothed set roughly halves the run).
+Likewise for each smoothing-parameter variant
+(`smoothing_variant_average_annotations_<token>_*.h5`, newest per `<token>`):
+
+  - `<token>_movie_{yz,xz}.mp4`   (plain movies only, as in the pipeline)
+  - `<token>_{pretwitch,posttwitch,combined}_<ts>.csv`
+
+`REGEN_VIZ=0` skips the smoothed movies/HTML while still rebuilding the
+unsmoothed and variant movies, so e.g. `REGEN_VIZ=0 REGEN_CSVS=0
+REGEN_VARIANTS=0` rebuilds **only** the unsmoothed movies (each 371-frame movie
+takes ~20 min, so skipping tracks you don't need saves real time).
 
 The CSVs are written with the timestamp parsed from the HDF5 filename, so they
 **overwrite** the existing trio (same names) rather than piling up a new dated
@@ -41,6 +48,7 @@ Environment:
     REGEN_CSVS             "0" to skip the CSV rebuild   (default on)
     REGEN_VIZ             "0" to skip movies/HTML/index  (default on)
     REGEN_UNSMOOTHED      "0" to skip the unsmoothed track entirely (default on)
+    REGEN_VARIANTS        "0" to skip the smoothing-variant tracks   (default on)
 """
 
 using ShroffCelegansModels
@@ -77,6 +85,34 @@ function _latest_average_h5(output_dir::AbstractString)
     path === nothing &&
         error("regenerate_viz_only: no $(_SMOOTHED_PREFIX)*.h5 in $output_dir")
     return path
+end
+
+# smoothing_variant_average_annotations_r005_theta007_z004_2026_09_10_050810.h5
+const _VARIANT_RE =
+    r"^smoothing_variant_average_annotations_(r\d{3}_theta\d{3}_z\d{3})_\d{4}_\d{2}_\d{2}_\d{6}\.h5$"
+
+"""
+    _latest_variant_h5s(output_dir) -> Vector{Tuple{String,String}}
+
+Newest `(token, path)` per smoothing-parameter variant found in `output_dir`,
+sorted by token. Keeping the newest *per token* (rather than newest overall)
+means a variant survives here even if a later run dropped it from
+`smoothing_variants`.
+"""
+function _latest_variant_h5s(output_dir::AbstractString)
+    isdir(output_dir) || return Tuple{String, String}[]
+    newest = Dict{String, String}()
+    for f in readdir(output_dir)
+        occursin(".tmp.", f) && continue
+        m = match(_VARIANT_RE, f)
+        m === nothing && continue
+        token = m.captures[1]
+        path = joinpath(output_dir, f)
+        if !haskey(newest, token) || mtime(path) > mtime(newest[token])
+            newest[token] = path
+        end
+    end
+    return [(t, newest[t]) for t in sort(collect(keys(newest)))]
 end
 
 """
@@ -130,28 +166,33 @@ function main()
     do_csvs = get(ENV, "REGEN_CSVS", "1") != "0"
     do_viz  = get(ENV, "REGEN_VIZ", "1") != "0"
     do_unsmoothed = get(ENV, "REGEN_UNSMOOTHED", "1") != "0"
+    do_variants = get(ENV, "REGEN_VARIANTS", "1") != "0"
 
     h5_path = _latest_average_h5(output_dir)
     unsmoothed_h5_path = do_unsmoothed ? _latest_h5(output_dir, _UNSMOOTHED_PREFIX) : nothing
     if do_unsmoothed && unsmoothed_h5_path === nothing
         @warn "No unsmoothed HDF5 found — skipping the unsmoothed track" output_dir prefix=_UNSMOOTHED_PREFIX
     end
-    @info "regenerate_viz_only starting" output_dir h5_path unsmoothed_h5_path n_timepoints do_csvs do_viz do_unsmoothed
+    variant_h5_paths = do_variants ? _latest_variant_h5s(output_dir) : Tuple{String, String}[]
+    @info "regenerate_viz_only starting" output_dir h5_path unsmoothed_h5_path variants=first.(variant_h5_paths) n_timepoints do_csvs do_viz do_unsmoothed do_variants
 
     if do_csvs
         _regenerate_csvs(h5_path, output_dir)
         unsmoothed_h5_path === nothing ||
             _regenerate_csvs(unsmoothed_h5_path, output_dir; prefix = "unsmoothed")
+        for (token, variant_h5) in variant_h5_paths
+            _regenerate_csvs(variant_h5, output_dir; prefix = token)
+        end
     end
 
     if do_viz
-        # Regenerates movies (both tracks) + meshscatter HTML, then rewrites
+        # Regenerates movies (all tracks) + meshscatter HTML, then rewrites
         # index.html last so it reflects the fresh CSV *and* movie mtimes.
-        _generate_pipeline_visualizations(h5_path, unsmoothed_h5_path)
+        _generate_pipeline_visualizations(h5_path, unsmoothed_h5_path, variant_h5_paths)
     else
-        # Smoothed viz pass skipped: still rebuild the unsmoothed movies if asked
-        # (REGEN_VIZ=0 REGEN_CSVS=0 regenerates *only* that set), then refresh
-        # the index for whatever did change.
+        # Smoothed viz pass skipped: still rebuild the unsmoothed/variant movies
+        # if asked (e.g. REGEN_VIZ=0 REGEN_CSVS=0 REGEN_VARIANTS=0 regenerates
+        # *only* the unsmoothed set), then refresh the index for what changed.
         if unsmoothed_h5_path !== nothing
             try
                 _generate_unsmoothed_movies(unsmoothed_h5_path, output_dir)
@@ -159,7 +200,8 @@ function main()
                 @warn "Unsmoothed movie generation failed (other outputs still valid)" err
             end
         end
-        if do_csvs || unsmoothed_h5_path !== nothing
+        _generate_variant_movies(variant_h5_paths, output_dir)
+        if do_csvs || unsmoothed_h5_path !== nothing || !isempty(variant_h5_paths)
             try
                 ShroffCelegansModels._write_recompute_index(output_dir)
                 @info "Regenerated recompute index (no smoothed viz pass)" output_dir
@@ -169,7 +211,7 @@ function main()
         end
     end
 
-    @info "regenerate_viz_only complete" output_dir h5_path unsmoothed_h5_path
+    @info "regenerate_viz_only complete" output_dir h5_path unsmoothed_h5_path variants=first.(variant_h5_paths)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

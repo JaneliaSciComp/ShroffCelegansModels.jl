@@ -78,9 +78,39 @@ function _generate_unsmoothed_movies(
     end
 end
 
+"""
+    _generate_variant_movies(variant_h5_paths, output_dir)
+
+Render `<token>_movie_{yz,xz}.mp4` for each smoothing-parameter variant, where
+`variant_h5_paths` is an iterable of `(token, h5_path)` pairs.
+
+Only the plain meshscatter movies are rendered for variants — not the combined
+pre+post-twitch pair, which is twice as many frames and adds ~an hour per
+variant without helping compare smoothing settings.
+"""
+function _generate_variant_movies(variant_h5_paths, output_dir::AbstractString)
+    for (token, variant_h5) in variant_h5_paths
+        if !isfile(variant_h5)
+            @warn "Variant HDF5 missing; skipping its movies" token variant_h5
+            continue
+        end
+        try
+            variant_dict = ShroffCelegansModels.load_average_annotations(filename = variant_h5)
+            for view in (:yz, :xz)
+                movie_path = joinpath(output_dir, "$(token)_movie_$(view).mp4")
+                generate_meshscatter_movie(variant_dict; output_path = movie_path, view)
+                @info "Variant movie written" token view movie_path
+            end
+        catch err
+            @warn "Variant movie generation failed (other outputs still valid)" token err
+        end
+    end
+end
+
 function _generate_pipeline_visualizations(
     h5_path::AbstractString,
     unsmoothed_h5_path::Union{Nothing, AbstractString} = nothing,
+    variant_h5_paths = (),
 )
     output_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
     pipeline_run = Dates.format(Dates.unix2datetime(mtime(h5_path)), "yyyy-mm-ddTHH:MM:SS")
@@ -122,6 +152,8 @@ function _generate_pipeline_visualizations(
         end
     end
 
+    _generate_variant_movies(variant_h5_paths, output_dir)
+
     movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
     status = (; pipeline_run, movie_created)
     open(joinpath(output_dir, "pipeline_status.json"), "w") do io
@@ -158,7 +190,11 @@ function run_pipeline(marker)
     @info "Pipeline produced artifacts" result
 
     try
-        _generate_pipeline_visualizations(result.h5_path, result.unsmoothed_h5_path)
+        _generate_pipeline_visualizations(
+            result.h5_path,
+            result.unsmoothed_h5_path,
+            [(v.token, v.h5_path) for v in result.variant_paths],
+        )
     catch err
         @warn "Visualization generation failed (pipeline outputs still valid)" err
     end
