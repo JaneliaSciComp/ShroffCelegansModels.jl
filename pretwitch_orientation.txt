@@ -1,0 +1,29 @@
+We need to determine the anterior-posterior, dorsal-central, and left-right axes for the pretwitch embyro.
+
+We previously plotted pretwitch and posttwitch data in src/seam_cell_to_lineage_map.jl
+
+At the four cell state, we can establish the anterior-posterior and dorsal-ventral axis directions using these for reference.
+
+ABa - anterior
+ABp - dorsal
+P2 - posterior
+EMS - ventral
+
+After establishing the initial orientation, we need to determine the orientaion in subsequence frames. The first scheme to track the orientation is to use the following information from WormGuides. I understand that it uses the following data to interpolate a rotation of the axes.
+
+Column
+Value
+Key_Frames_Rotate
+1 16 321 359
+Key_Values_Rotate
+90 30 30 90
+Initial_Rotation
+0 0 0
+
+So the compass rotates 90°→30° between time points 1–16, holds at 30° through 321, then rotates back 30°→90° between 321–359 (out of 360 total time points).
+
+What I would like to do is make a movie of the pretwitch cell locations with the anterior-posterior, dorsal-ventral, and left-right axes labeled and then rotate the axes as described above. The goal is to establish these axes for every pretwitch frame and then rotate the pretwitch coordinates so that the three axes are fixed in place.
+
+1. I am not sure if the above interpolation scheme will work, but we should try it first.
+2. My next approach would be look at the lineage of the initial four cells, find the average position of the descendants, and then use those as markers in later frames.
+3. My last approach includes also using some post-twitch knowledge and the orientation analysis that we recently did to help establish the axes in the pretwitch embyro.
