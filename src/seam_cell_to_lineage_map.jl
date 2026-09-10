@@ -159,9 +159,9 @@ function pretwitch_seamcells_over_time(;
 )
     f = Figure()
     ax = Axis3(f[1, 1], aspect=:data,
-        xlabel="L - R (μm)",
+        xlabel="R - L (μm)",
         ylabel="A - P (μm)",
-        zlabel="D - V (μm)",
+        zlabel="V - D (μm)",
         titlealign=:left
     )
     xlims!(ax, -15, 15)
@@ -208,6 +208,8 @@ function pretwitch_seamcells_over_time(;
             end
             append!(points, avg_models_points)
         end
+        # Flip LR/DV: negate x (LR) and z (DV); y (AP) unchanged.
+        points = map(p -> Point3f(-p[1], p[2], -p[3]), points)
         return seam_cell => points .* voxel_size
     end |> Dict{String,Vector{Point3f}}
 
@@ -245,6 +247,8 @@ function pretwitch_seamcells_over_time(;
 
     annotation_pts = collect(values(get_pretwitch_annotation_points_at_time(N_prewitch_timepoints; pretwitch_df)))
     annotation_pts .= ([0.0 0.0 1.0; 1.0 0.0 0.0; 0.0 1.0 0.0],) .* annotation_pts .* voxel_size
+    # Flip LR/DV: negate x (LR) and z (DV); y (AP) unchanged.
+    annotation_pts .= map(p -> Point3f(-p[1], p[2], -p[3]), annotation_pts)
     annotation_pts .-= pretwitch_translation
 
     N = length(left_seam_cells)
@@ -641,20 +645,21 @@ function get_pretwitch_explicit_df(
     pretwitch_df.y .-= last_pretwitch_H2M[2] - first_posttwitch_H2M[2]
     # LR
     pretwitch_df.z .-= last_pretwitch_H2M[3] - first_posttwitch_H2M[1]
+    # Axes are flipped: RL = -LR (-z) and VD = -DV (-y); AP (x) is unchanged.
     if use_micrometers
         return DataFrame(
             lineage_name = pretwitch_df.cell,
             minutes_post_first_cleavage = pretwitch_df.time,
-            LR_micrometers = pretwitch_df.z .* voxel_size,
-            DV_micrometers = pretwitch_df.y .* voxel_size,
+            RL_micrometers = .-pretwitch_df.z .* voxel_size,
+            VD_micrometers = .-pretwitch_df.y .* voxel_size,
             AP_micrometers = pretwitch_df.x .* voxel_size
         )
     else
         return DataFrame(
             lineage_name = pretwitch_df.cell,
             minutes_post_first_cleavage = pretwitch_df.time,
-            LR_voxels = pretwitch_df.z,
-            DV_voxels = pretwitch_df.y,
+            RL_voxels = .-pretwitch_df.z,
+            VD_voxels = .-pretwitch_df.y,
             AP_voxels = pretwitch_df.x
         )
     end

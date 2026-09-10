@@ -105,12 +105,36 @@ function save_average_annotations(
     end
 end
 
-function load_average_annotations(; filename = "average_annotations.h5")
+"""
+    load_average_annotations(; filename, flip_lr=true)
+
+Load averaged annotation positions from an HDF5 file.
+
+In this (display/movie) coordinate frame the axes are `x=LR, y=AP, z=DV`.
+When `flip_lr=true` (the default) the LR (`x`) axis is negated as the
+positions are read (mirror across the AP–DV plane), renaming the emitted
+LR axis to RL. This is the single chokepoint that flips LR for every
+display consumer (meshscatter movies, the static HTML export, and the
+interactive web apps), which all load through here.
+
+The DV (`z`) axis is **not** flipped here: this is post-twitch averaged
+data, whose raw HDF5 `z` is already in the correct VD orientation. (Only
+the pre-twitch source needs a DV flip — see `get_pretwitch_explicit_df`
+and the combined movie's `_pretwitch_to_movie`.)
+
+`resave_for_ben` reads the HDF5 directly (not via this function), so the
+CSV-export path is unaffected; the matching LR negation for the CSVs
+lives in `explicit_export.jl`.
+"""
+function load_average_annotations(; filename = "average_annotations.h5", flip_lr::Bool = true)
     d = Dict{String, @NamedTuple{annotations::Vector{String}, positions::Vector{Vector{Point{3, Float64}}}}}()
     if !isfile(filename)
         @warn "Average annotations file not found; returning empty dict" filename
         return d
     end
+    # x=LR, y=AP, z=DV → negate LR only (mirror across the AP–DV plane).
+    # DV (z) stays as-is: post-twitch raw z is already in VD orientation.
+    flip(p::Point3) = flip_lr ? Point3(-p[1], p[2], p[3]) : p
     h5open(filename) do h5f
         for k in keys(h5f)
             h5g = h5f[k]
@@ -120,7 +144,7 @@ function load_average_annotations(; filename = "average_annotations.h5")
             for tp in timepoints
                 matrix = transpose(h5g[tp][]::Matrix{Float64})
                 idx = parse(Int, tp[end-2:end])
-                positions[idx] = vec(reinterpret(Point3{Float64}, matrix))
+                positions[idx] = flip.(vec(reinterpret(Point3{Float64}, matrix)))
             end
             d[k] = (; annotations, positions)
         end
