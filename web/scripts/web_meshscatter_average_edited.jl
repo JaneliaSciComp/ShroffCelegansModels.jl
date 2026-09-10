@@ -3,20 +3,18 @@ using Bonito
 using ShroffCelegansModels
 using Sockets
 
-#push!(LOAD_PATH, "/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl")
-#push!(LOAD_PATH, dirname(dirname(pathof(ShroffCelegansModels))))
-#include("../../src/demo_averaging/save_cache.jl")
-include("../../src/demo_averaging/average_annotations.jl")
 include("../../scripts/meshscatter_average_dev.jl")
 
-using ShroffCelegansModels: load_average_annotations, load_annotation_cache
+using ShroffCelegansModels: load_average_annotations, load_latest_average_annotations, load_annotation_cache
 
 function black_body(fig)
     DOM.body(fig, style=Styles(CSS("background-color" => "black")))
 end
 
 function meshscatter_average_webapp()
-    average_annotation_dict = load_average_annotations(; filename = "edited_smoothed_average_annotations_r020_theta020_z030_with_seam_cells_2025_02_13.h5")
+    average_annotation_dict = load_latest_average_annotations(
+        default_filename = "edited_smoothed_average_annotations_r020_theta020_z030_with_seam_cells_2025_02_13.h5",
+    )
     app = App(; title="Shroff Lab: C. elegans meshscatter_average") do session::Session
         return with_theme(theme_black()) do
             black_body(meshscatter_average(average_annotation_dict; session, xy_bounding_radius=sqrt(52)))

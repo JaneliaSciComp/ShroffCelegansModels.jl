@@ -35,6 +35,15 @@ function web_show_average_annotations(datasets = datasets)
 end
 
 function web_main()
+    # Prime both annotation caches at runtime so the first render reuses
+    # precomputed positions instead of recomputing (group positions via
+    # my_annotation_position_cache; untwisted annotations via annotations_cache).
+    # This is done explicitly here because the module no longer loads them at
+    # precompile (that froze the build-time snapshot into the .ji). alias_cache_unix
+    # then maps the Windows-rooted keys to the Linux dataset.path used at runtime.
+    @info "Loading annotation cache"
+    prime_annotation_caches()
+    alias_cache_unix("/nearline/shroff/")
     WGLMakie.activate!(; resize_to = :body)
     server = web_show_average_annotations()
 end

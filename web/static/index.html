@@ -1,37 +1,145 @@
-<html>
+<!doctype html>
+<html lang="en">
 	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Shroff Data Internal</title>
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+		<link rel="stylesheet" href="/style.css">
 	</head>
 	<body>
-		<h1>Internal Shroff Data</h1>
-		<ul>
-			<li><a href="/show_average_annotations/">Show Average Annotations</a></li>
-            <li><a href="/debug_annotation_ap_axis/">Debug Annotation AP Axis</a></li>
-            <li><a href="/debug_annotation_ap_axis_live/">Debug Annotation AP Axis (Live untwisting!)</a></li>
-            <li><a href="/debug_annotation_ap_axis_retrack_live/">Debug Annotation AP Axis Retrack (Live untwisting!)</a></li>
-            <li><a href="/fix_annotation_ap_axis/">Fix Annotation AP Axis</a></li>
-            <li><a href="/zscore_analysis/">Z-Score Analysis</a></li>
-            <li><a href="/modified_times/">Annotation Modified Times</a></li>
-            <li>Mesh Scatter</li>
-            <ul>
-			    <li><a href="/meshscatter_average_edited/">Mesh Scatter Average Edited</a></li>
-                <ul>
-    			    <li><a href="/meshscatter_average_edited/nerve_ring">Mesh Scatter Average Edited (Nerve Ring)</a></li>
-                </ul>
-			    <li><a href="/meshscatter_average_edited_2024_10_24/">Mesh Scatter Average Edited (2024-10-24)</a></li>
-                <ul>
-    			    <li><a href="/meshscatter_average_edited_2024_10_24/nerve_ring">Mesh Scatter Average Edited (2024-10-24, Nerve Ring)</a></li>
-                </ul>
-            </ul>
-            <!--
-			<li><a href="/meshscatter_all/">Mesh Scatter All</a></li>
-			<li><a href="/meshscatter_all_dev/">Mesh Scatter All Development and Debugging</a></li>
-			<li><a href="/meshscatter_average/">Mesh Scatter Average</a></li>
-			<li><a href="/meshscatter_average/nerve_ring">Mesh Scatter Average, Nerve Ring</a></li>
-            -->
-		</ul>
-        <a href="controls.html">View 3D camera controls</a>
-        <h2>Raw Data</h2>
-        <a href="/data/">Access Raw Data</a>
+		<main class="container">
+			<h1>Internal Shroff Data</h1>
+			<ul>
+				<li><a href="/show_average_annotations/">Show Average Annotations</a></li>
+				<li><a href="/debug_annotation_ap_axis/">Debug Annotation AP Axis</a></li>
+				<li><a href="/debug_annotation_ap_axis_live/">Debug Annotation AP Axis (Live untwisting!)</a></li>
+				<li><a href="/debug_annotation_ap_axis_retrack_live/">Debug Annotation AP Axis Retrack (Live untwisting!)</a></li>
+				<li><a href="/fix_annotation_ap_axis/">Fix Annotation AP Axis</a></li>
+				<li><a href="/zscore_analysis/">Z-Score Analysis</a></li>
+				<li><a href="/modified_times/">Annotation Modified Times</a></li>
+				<li>Mesh Scatter
+					<ul>
+						<li><a href="/meshscatter_average_edited/">Mesh Scatter Average Edited</a>
+							<ul>
+								<li><a href="/meshscatter_average_edited/nerve_ring">Mesh Scatter Average Edited (Nerve Ring)</a></li>
+							</ul>
+						</li>
+						<li><a href="/meshscatter_average_edited_2024_10_24/">Mesh Scatter Average Edited (2024-10-24)</a>
+							<ul>
+								<li><a href="/meshscatter_average_edited_2024_10_24/nerve_ring">Mesh Scatter Average Edited (2024-10-24, Nerve Ring)</a></li>
+							</ul>
+						</li>
+					</ul>
+				</li>
+				<!--
+				<li><a href="/meshscatter_all/">Mesh Scatter All</a></li>
+				<li><a href="/meshscatter_all_dev/">Mesh Scatter All Development and Debugging</a></li>
+				<li><a href="/meshscatter_average/">Mesh Scatter Average</a></li>
+				<li><a href="/meshscatter_average/nerve_ring">Mesh Scatter Average, Nerve Ring</a></li>
+				-->
+			</ul>
+			<p><a href="controls.html">View 3D camera controls</a></p>
+
+			<h2>Visualizations</h2>
+			<ul>
+				<li><a href="/recompute/meshscatter_latest.html">Interactive meshscatter (static export, slider only)</a></li>
+			</ul>
+			<h3>Meshscatter Movies (48 fps)</h3>
+			<figure>
+				<figcaption>YZ view (side)</figcaption>
+				<video id="video-yz" controls loop muted width="100%" src="/recompute/movie_yz.mp4">
+					<a href="/recompute/movie_yz.mp4">Download YZ movie</a>
+				</video>
+			</figure>
+			<figure>
+				<figcaption>XZ view (top-down)</figcaption>
+				<video id="video-xz" controls loop muted width="100%" src="/recompute/movie_xz.mp4">
+					<a href="/recompute/movie_xz.mp4">Download XZ movie</a>
+				</video>
+			</figure>
+			<script>
+				(function () {
+					document.addEventListener('DOMContentLoaded', function () {
+						var videos = ['video-yz', 'video-xz'].map(function (id) {
+							return document.getElementById(id);
+						});
+						var readyCount = 0;
+
+						// Initialise per-element flag used to suppress echoed events.
+						videos.forEach(function (v) { v._prog = false; });
+
+						// Start both as soon as both report canplay.
+						videos.forEach(function (v) {
+							v.addEventListener('canplay', function onReady() {
+								v.removeEventListener('canplay', onReady);
+								if (++readyCount === videos.length) {
+									videos.forEach(function (w) {
+										w.play().catch(function () {});
+									});
+								}
+							});
+						});
+
+						// Propagate an action to peer videos, guarded by _prog so the
+						// resulting async events don't echo back. The 200 ms window is
+						// enough for play/pause/seeked to settle in all browsers.
+						videos.forEach(function (v) {
+							var peers = videos.filter(function (o) { return o !== v; });
+
+							function propagate(fn) {
+								if (v._prog) return;
+								peers.forEach(function (o) {
+									o._prog = true;
+									fn(o);
+									setTimeout(function () { o._prog = false; }, 200);
+								});
+							}
+
+							v.addEventListener('play', function () {
+								propagate(function (o) {
+									o.currentTime = v.currentTime;
+									o.play().catch(function () {});
+								});
+							});
+
+							v.addEventListener('pause', function () {
+								propagate(function (o) {
+									o.pause();
+									o.currentTime = v.currentTime;
+								});
+							});
+
+							v.addEventListener('seeked', function () {
+								propagate(function (o) {
+									o.currentTime = v.currentTime;
+								});
+							});
+						});
+					});
+				})();
+			</script>
+
+			<h2>Pipeline Status</h2>
+			<p id="pipeline-status"><em>Loading…</em></p>
+			<script>
+				fetch('/recompute/pipeline_status.json')
+					.then(r => r.json())
+					.then(d => {
+						document.getElementById('pipeline-status').innerHTML =
+							'Last pipeline run: ' + d.pipeline_run + '<br>Movie created: ' + d.movie_created;
+					})
+					.catch(() => {
+						document.getElementById('pipeline-status').innerHTML = '<em>Status unavailable</em>';
+					});
+			</script>
+
+			<h2>Outputs</h2>
+			<ul>
+				<li><a href="/recompute/">Latest recompute outputs (HDF5 + CSV)</a></li>
+				<li><a href="/csv_archives/">Per-dataset CSV archives (tar.gz, for offline compute)</a></li>
+				<li><a href="/data/">Access raw data</a></li>
+			</ul>
+		</main>
 	</body>
 </html>

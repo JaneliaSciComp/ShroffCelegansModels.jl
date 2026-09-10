@@ -1,0 +1,15 @@
+[Unit]
+Description="Mesh Scatter Average Edited"
+After=default.target
+
+[Service]
+User=kittisopikulm
+Group=shroff
+ExecStart=/groups/scicompsoft/home/kittisopikulm/.juliaup/bin/julia \
+    --project=/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/web \
+    /groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/web/scripts/web_meshscatter_average_edited.jl
+WorkingDirectory=/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl
+Type=simple
+
+[Install]
+WantedBy=default.target

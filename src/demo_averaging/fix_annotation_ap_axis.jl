@@ -6,7 +6,6 @@ using ShroffCelegansModels.JSON3
 using ShroffCelegansModels.Dates
 using ShroffCelegansModels.Sockets
 using ShroffCelegansModels.HDF5
-using ShroffCelegansModels: swapyz_scale
 
 
 const ANNOTATION_PERSIST_SERVER_PORT = 3129
@@ -666,9 +665,28 @@ function AnnotationChange(;
     )
 end
 
-function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVER_PORT)
+"""
+    fix_annotation_ap_axis_persist_listen(; port = ANNOTATION_PERSIST_SERVER_PORT)
+
+Bind the annotation-persist TCP listener and return the `Sockets.TCPServer`.
+
+Kept separate from the accept loop so a caller can bind *synchronously* and let
+any bind failure (e.g. `EADDRINUSE`) propagate, before handing the listener to a
+background task. Doing the `listen` inside a fire-and-forget `Threads.@spawn`
+swallows such errors silently, which under a multithreaded runtime left the
+server unbound with no log (connection refused on the client side).
+"""
+function fix_annotation_ap_axis_persist_listen(; port = ANNOTATION_PERSIST_SERVER_PORT)
     server = Sockets.listen(port)
     @info "Server listening on port $port"
+    return server
+end
+
+function fix_annotation_ap_axis_persist_server(; port = ANNOTATION_PERSIST_SERVER_PORT)
+    fix_annotation_ap_axis_persist_server(fix_annotation_ap_axis_persist_listen(; port))
+end
+
+function fix_annotation_ap_axis_persist_server(server::Sockets.TCPServer)
     server_running = true
     while server_running
         client = Sockets.accept(server)
@@ -866,7 +884,7 @@ Returns
 - The updated `annotations_cache`.
 """
 function update_annotations_cache(
-    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, Vector},
+    annotations_cache::Dict{Tuple{String, UnitRange, Bool}, AnnotationsCacheValue},
     annotations_changes::Dict{String, Pair{Point3{Float64},Point3{Float64}}};
     dry_run::Bool = false
 )
@@ -886,17 +904,22 @@ function update_annotations_cache(
             dataset_path = join(change_key_parts[begin:end-4], "\\")
             annotation_name = change_key_parts[end-2] * "/" * change_key_parts[end-1]
         end
-        # Could error if dataset_path is not in key_map_dict
-        if !haskey(key_map_dict, dataset_path)
-            @warn "Dataset path $dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
-            continue
-        end
-        annotations_cache_key = key_map_dict[dataset_path]
+        # Normalize the change-file's Windows-style "X:\..." path to the local
+        # Linux path BEFORE looking it up: the live annotations_cache is keyed by
+        # the Linux dataset path (from priming via
+        # load_straightened_annotations_over_time), so matching against the raw
+        # "X:\..." string silently misses every change.
         local_dataset_path = dataset_path
         if Sys.isunix()
             local_dataset_path = replace(local_dataset_path, raw"X:\\" => "/nearline/shroff/")
             local_dataset_path = replace(local_dataset_path, "\\" => "/")
         end
+        # Could error if local_dataset_path is not in key_map_dict
+        if !haskey(key_map_dict, local_dataset_path)
+            @warn "Dataset path $local_dataset_path not found in annotations cache keys, skipping change for annotation $annotation_name at timepoint $timepoint"
+            continue
+        end
+        annotations_cache_key = key_map_dict[local_dataset_path]
         dataset = ShroffCelegansModels.Dataset(local_dataset_path)
         annotation_symbol = findfirst(==(annotation_name), dataset.cell_key.mapping)
         if isnothing(annotation_symbol)
@@ -905,25 +928,26 @@ function update_annotations_cache(
         end
         # timepoint above is the actual timepoint, but we need to adjust it to the dataset's range
         timepoint = timepoint - dataset.cell_key.start + 1
-        if ismissing(annotations_cache[annotations_cache_key][timepoint])
+        cached_annotations = annotations_cache[annotations_cache_key].annotations
+        if ismissing(cached_annotations[timepoint])
             @warn("Annotation $annotation_name at timepoint $timepoint is missing in cache for $annotations_cache_key")
             if !dry_run
-                annotations_cache[annotations_cache_key][timepoint] = Dict{String, Point3{Float64}}()
-                annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+                cached_annotations[timepoint] = Dict{String, Point3{Float64}}()
+                cached_annotations[timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
             end
         end
         # Check old_pt matches the cached point
         try
-            if !isapprox(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
-                _norm = norm(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
-                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
+            if !isapprox(cached_annotations[timepoint][string(annotation_symbol)], swapyz_unscale(old_pt))
+                _norm = norm(cached_annotations[timepoint][string(annotation_symbol)] - swapyz_unscale(old_pt))
+                @warn """Annotation point mismatch for $annotations_cache_key at timepoint $timepoint: $(cached_annotations[timepoint][string(annotation_symbol)]) != $(swapyz_unscale(old_pt)), norm difference: $_norm.
                 This may indicate the cache is out of sync with the changes, or the change does not apply cleanly to the current cache state. Consider reviewing this change and the current cache state to ensure consistency."""
             end
         catch e
             @warn "Error checking annotation point for $annotations_cache_key at timepoint $timepoint with annotation $annotation_symbol: $e"
         end
         if !dry_run
-            annotations_cache[annotations_cache_key][timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
+            cached_annotations[timepoint][string(annotation_symbol)] = swapyz_unscale(new_pt)
         end
     end
     return annotations_cache

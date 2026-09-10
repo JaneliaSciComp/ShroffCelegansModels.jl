@@ -1,7 +1,7 @@
 using ShroffCelegansModels.ProgressMeter
 using ShroffCelegansModels.Statistics: mean, var
 using ShroffCelegansModels.CoordinateTransformations
-using ShroffCelegansModels.FFTW: fftfreq, fft, ifft
+using ShroffCelegansModels.FFTW: fftfreq, fft, ifft, dct, idct
 using ShroffCelegansModels: swapyz_scale, swapyz_unscale, transverse_splines
 using ShroffCelegansModels.ColorSchemes: colorschemes
 using ShroffCelegansModels.GeometryBasics: Point3, Point3f

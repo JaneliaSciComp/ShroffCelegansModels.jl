@@ -43,7 +43,11 @@ spec:
   storageClassName: ocs-storagecluster-cephfs
   resources:
     requests:
-      storage: 1Gi
+      # Was 1Gi originally; expanded online to 20Gi (CephFS supports
+      # online resize) to accommodate per-dataset .csv tar.gz archives
+      # (~38 MB × 72 datasets ≈ 2.7 GB) plus recompute outputs +
+      # accumulated archive_*/ subdirs in /data/annotations/recompute/.
+      storage: 20Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

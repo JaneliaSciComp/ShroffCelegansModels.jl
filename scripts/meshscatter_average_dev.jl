@@ -3,6 +3,8 @@ using Makie: throttle, Button
 using Printf
 using GeometryBasics
 using ShroffCelegansModels: swapyz_scale
+using ShroffCelegansModels.CSV
+using ShroffCelegansModels.DataFrames: DataFrame, eachrow
 
 include("crop_video.jl")
 
@@ -250,7 +252,9 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         # record(fig, "/var/www/shroff/test.mp4", time_slider.range[]; update=false) do t
         # VideoStream
         controls_visible[] = false
-        vs = Record(fig, time_slider.range[]; update=false) do t
+        # compression=10 (CRF) for a high-quality intermediate; Makie's default
+        # (20) softens detail before crop_video re-encodes.
+        vs = Record(fig, time_slider.range[]; update=false, compression=10, framerate=48) do t
             set_close_to!(time_slider, t)
         end
         vid[] = DOM.div(crop_video(vs); id = "video_recording")
@@ -265,7 +269,8 @@ function meshscatter_average(average_annotations_dict; nerve_ring = false, model
         controls_visible[] = false
         L = time_slider.range[].stop
         _range = 1:L
-        vs = Record(fig, _range; update=false) do t
+        # compression=10 (CRF) for a high-quality intermediate (see above).
+        vs = Record(fig, _range; update=false, compression=10, framerate=48) do t
             if t <= L
                 set_close_to!(time_slider, t)
             elseif t <= 2L

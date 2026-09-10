@@ -38,6 +38,14 @@ spec:
               readOnly: true
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
+            - name: annotations
+              mountPath: /var/www/recompute
+              subPath: recompute
+              readOnly: true
+            - name: annotations
+              mountPath: /var/www/csv_archives
+              subPath: csv_archives
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -73,12 +81,20 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_annotation_cache reads the recompute
+            # my_annotation_position_cache.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 4Gi
               cpu: 250m
             limits:
-              memory: 4Gi
+              # loads avg_models_n*.h5 + my_annotation_position_cache.h5 +
+              # annotations_cache.h5 from the PVC (larger than the old bundled
+              # snapshots); 4Gi OOM-killed it, so allow headroom.
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -103,12 +119,19 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -133,12 +156,19 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: load_latest_average_annotations reads the newest
+            # edited_smoothed_average_annotations_*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
               cpu: 250m
             limits:
-              memory: 3Gi
+              # recording a movie (Record button) renders all timepoints and
+              # re-encodes via VideoIO; 3Gi was OOM-killed (exit 137).
+              memory: 8Gi
               cpu: "2"
           startupProbe:
             tcpSocket:
@@ -162,6 +192,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:
@@ -193,6 +227,10 @@ spec:
             - name: nearline
               mountPath: /nearline/shroff
               readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
+              readOnly: true
           resources:
             requests:
               memory: 2Gi
@@ -222,6 +260,10 @@ spec:
           volumeMounts:
             - name: nearline
               mountPath: /nearline/shroff
+              readOnly: true
+            # read-only: loading.jl reads avg_models_n*.h5 from /data/annotations/recompute
+            - name: annotations
+              mountPath: /data/annotations
               readOnly: true
           resources:
             requests:

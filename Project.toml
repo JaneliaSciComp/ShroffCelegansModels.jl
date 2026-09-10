@@ -3,6 +3,9 @@ uuid = "28a312d2-d9d3-46a7-98c1-9c09f12e8c99"
 version = "1.0.0-DEV"
 authors = ["Mark Kittisopikul <kittisopikulm@janelia.hhmi.org> and contributors"]
 
+[workspace]
+projects = ["glmakie", "web", "ShroffCelegansModelsCore"]
+
 [deps]
 BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -29,6 +32,7 @@ PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -37,7 +41,7 @@ ThinPlateSplines = "1d861738-f48e-4029-b1d3-81ce6bc7f5ab"
 TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 
 [sources]
-ThinPlateSplines = {url = "https://github.com/mkitti/ThinPlateSplines.jl"}
+ThinPlateSplines = {url = "https://github.com/mkitti/ThinPlateSplines.jl", rev = "mkitti-geometrybasics-ext-perf"}
 
 [compat]
 BSplineKit = "0.18, 0.19"
@@ -45,8 +49,8 @@ CSV = "0.10"
 ColorSchemes = "3"
 Colors = "0.12, 0.13"
 CoordinateTransformations = "0.6"
-Dates = "1"
 DataFrames = "1"
+Dates = "1"
 FFTW = "1"
 FileIO = "1"
 FixedPointNumbers = "0.8"
@@ -61,10 +65,11 @@ Observables = "0.5"
 PrecompileTools = "1"
 ProgressMeter = "1"
 QuadGK = "2"
+SHA = "0.7.0"
+Sockets = "1"
 StaticArrays = "1"
 Statistics = "1"
 StatsBase = "0.34"
-Sockets = "1"
 ThinPlateSplines = "0.1, 0.2.0"
 TiffImages = "0.10, 0.11"
 julia = "1"
@@ -74,6 +79,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[workspace]
-projects = ["glmakie", "web", "ShroffCelegansModelsCore"]

@@ -13,13 +13,22 @@ function average_annotations(
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
     avg_models::Vector{<: CelegansModel} = avg_models,
-    use_cell_key_annotations_only = true
+    use_cell_key_annotations_only = true,
+    checkpoint_dir::Union{Nothing, AbstractString} = nothing,
+    progress_counter::Union{Nothing, Threads.Atomic{Int}} = nothing,
+    progress_total::Union{Nothing, Int} = nothing,
 )
     if isa(timepoints, Integer)
         N_timepoints = timepoints
         timepoints = LinRange(0, 1, N_timepoints)
     end
-    group_annotation_positions_over_time = get_group_annotation_positions_over_time(datasets, cache, timepoints; avg_models = avg_models)
+    group_annotation_positions_over_time = get_group_annotation_positions_over_time(
+        datasets, cache, timepoints;
+        avg_models = avg_models,
+        checkpoint_dir = checkpoint_dir,
+        progress_counter = progress_counter,
+        progress_total = progress_total,
+    )
     group_annotation_positions_over_time::Vector{Vector{Dict{String, Point3{Float64}}}}
     #common_annotations = intersect(map(datasets_info) do dataset_info
     #    collect(keys(dataset_info.annotation_dict))
@@ -51,10 +60,18 @@ function average_annotations(
     cache::Dict{String, Vector{Vector{Point3{Float64}}}} = my_annotation_position_cache,
     timepoints::Union{AbstractVector{Float64}, Integer} = LinRange(0,1,201),
     avg_models::Vector{<: CelegansModel} = avg_models,
-    use_cell_key_annotations_only = true
+    use_cell_key_annotations_only = true,
+    checkpoint_dir::Union{Nothing, AbstractString} = nothing,
 )
-    average_annotations_dict = Dict(keys(datasets) .=> map(collect(keys(datasets))) do k    
-           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only)
+    # Shared progress state so every group's "step6 dataset done" line is
+    # numbered against the grand total of datasets across all groups, making
+    # overall progress estimable (otherwise each group restarts at 1/N).
+    grand_total = sum(length, values(datasets); init = 0)
+    progress_counter = Threads.Atomic{Int}(0)
+    group_keys = collect(keys(datasets))
+    average_annotations_dict = Dict(group_keys .=> map(enumerate(group_keys)) do (gi, k)
+           @info "[6/8] Averaging group" group=k group_number=string(gi, "/", length(group_keys)) n_datasets=length(datasets[k]) datasets_done=progress_counter[] grand_total
+           average_annotations(datasets[k]; cache, timepoints, avg_models, use_cell_key_annotations_only, checkpoint_dir, progress_counter, progress_total=grand_total)
     end)
     return average_annotations_dict
 end
@@ -81,6 +98,10 @@ end
 
 function load_average_annotations(; filename = "average_annotations.h5")
     d = Dict{String, @NamedTuple{annotations::Vector{String}, positions::Vector{Vector{Point{3, Float64}}}}}()
+    if !isfile(filename)
+        @warn "Average annotations file not found; returning empty dict" filename
+        return d
+    end
     h5open(filename) do h5f
         for k in keys(h5f)
             h5g = h5f[k]
@@ -96,4 +117,34 @@ function load_average_annotations(; filename = "average_annotations.h5")
         end
     end
     return d
+end
+
+"""
+    load_latest_average_annotations(; default_filename, prefix="edited_smoothed_average_annotations_", dir=ENV["RECOMPUTE_OUTPUT_DIR"] or "/data/annotations/recompute")
+
+Load the most recently produced averaged-annotations HDF5 from the recompute
+output directory if one exists; otherwise fall back to `default_filename`.
+Used by the meshscatter web apps so a fresh recompute is picked up on the
+next service restart without code changes.
+
+The directory is scanned for files matching `prefix*.h5` and the newest by
+mtime is chosen.
+"""
+function load_latest_average_annotations(;
+    default_filename::AbstractString,
+    prefix::AbstractString = "edited_smoothed_average_annotations_",
+    dir::AbstractString = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute"),
+)
+    chosen = default_filename
+    if isdir(dir)
+        candidates = String[
+            joinpath(dir, f) for f in readdir(dir)
+            if startswith(f, prefix) && endswith(f, ".h5") && !occursin(".tmp.", f)
+        ]
+        if !isempty(candidates)
+            chosen = argmax(mtime, candidates)
+        end
+    end
+    @info "Loading averaged annotations" chosen default_filename dir
+    return load_average_annotations(; filename = chosen)
 end

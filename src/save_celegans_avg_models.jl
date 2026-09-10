@@ -29,6 +29,37 @@ function load_avg_models(avg_models_filename= avg_models_filename())
     identity.(avg_models)
 end
 
+"""
+    load_latest_avg_models(; dir=ENV["RECOMPUTE_OUTPUT_DIR"] or "/data/annotations/recompute", default_filename=nothing)
+
+Load the recompute pipeline's average models — the newest `avg_models_n<N>.h5`
+(by mtime) in the recompute output directory. The previously-bundled
+`celegans_avg_models_*.h5` snapshot is outdated and no longer shipped, so there
+is no built-in fallback; pass `default_filename` (and ensure it exists) for a
+local/offline source.
+"""
+function load_latest_avg_models(;
+    dir::AbstractString = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute"),
+    default_filename::Union{Nothing,AbstractString} = nothing,
+)
+    if isdir(dir)
+        candidates = String[
+            joinpath(dir, f) for f in readdir(dir)
+            if startswith(f, "avg_models_n") && endswith(f, ".h5") && !occursin(".tmp.", f)
+        ]
+        if !isempty(candidates)
+            chosen = argmax(mtime, candidates)
+            @info "Loading average models" chosen dir
+            return load_avg_models(chosen)
+        end
+    end
+    if default_filename !== nothing && isfile(default_filename)
+        @info "Loading average models (fallback)" default_filename
+        return load_avg_models(default_filename)
+    end
+    error("load_latest_avg_models: no avg_models_n*.h5 found in $dir and no usable fallback (default_filename=$default_filename)")
+end
+
 function save_measurements(avg_models_filename = avg_models_filename())
     h5open(avg_models_filename) do h5f
         attrs(h5f)["voxel_pitch_micrometers"] = 0.1625

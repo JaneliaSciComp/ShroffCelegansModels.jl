@@ -28,6 +28,9 @@ module ShroffCelegansModels
     using StatsBase: StatsBase
     using ThinPlateSplines: ThinPlateSplines
     using TiffImages: TiffImages
+
+    export get_avg_models
+
     if gethostname() == "KITTISOPIKULM-2"
         const config_path = raw"D:\shroff\python_model_building\C-Elegans-Model-Generation\config_2026_03_19_v2.json"
     else
@@ -73,6 +76,16 @@ module ShroffCelegansModels
     include("demo_averaging/transform_annotations.jl")
     include("demo_averaging/get_group_annotation_positions_over_time.jl")
     include("demo_averaging/average_annotations.jl")
+    include("demo_averaging/add_seam_cells_as_annotations.jl")
+    include("demo_averaging/smooth_average_annotations.jl")
+    include("demo_averaging/resave_for_ben.jl")
+    # seam_cell_to_lineage_map.jl defines get_pretwitch_df,
+    # get_annotation_name_translation_df, get_pretwitch_explicit_df.
+    # explicit_export.jl uses those + get_seam_cells_explicit_df to
+    # build the combined pretwitch+posttwitch dataframe for the pipeline.
+    include("seam_cell_to_lineage_map.jl")
+    include("demo_averaging/explicit_export.jl")
+    include("recompute_pipeline.jl")
     include("makie.jl")
 
     include("precompile.jl")

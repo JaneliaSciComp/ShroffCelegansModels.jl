@@ -7,9 +7,16 @@ using LinearAlgebra: normalize, cross, dot, norm, I
 #using GeometryBasics
 #using GLMakie
 
-include("save_celegans_avg_models.jl")
-include("demo_averaging/seam_cell_pts.jl")
-include("demo_averaging/modelio.jl")
+# `save_celegans_avg_models.jl`, `seam_cell_pts.jl`, and `modelio.jl`
+# are already included by the package (src/ShroffCelegansModels.jl and
+# its transitive includes); no need to include them again here.
+
+# Default search paths for the ryan_data CSVs the helpers below use.
+# Resolved at @__DIR__ time so the package can be loaded from any cwd.
+const _RYAN_DATA_DIR = joinpath(@__DIR__, "..", "ryan_data")
+const _PRETWITCH_CSV = joinpath(_RYAN_DATA_DIR, "final_20251205_pre-twitch_coords.csv")
+const _NAMING_CORRELATIONS_CSV = joinpath(_RYAN_DATA_DIR, "MIPAV_PositionalModel_Packer_Naming_Correlations_v6.csv")
+const _COLOR_CODE_CSV = joinpath(_RYAN_DATA_DIR, "Updated_Color_Code_Assignments_04302026.csv")
 
 # Mapping from embryonic lineage strings to seam cell names
 const lineage_to_seam_cell_map = Dict(
@@ -65,8 +72,8 @@ const right_seam_cells = ["H0R", "H1R", "H2R", "V1R", "V2R", "V3R", "V4R", "V5R"
 
 const seam_cell_midpoints = replace.(left_seam_cells, 'L' => 'M')
 
-function get_pretwitch_df()
-    pretwitch_df = CSV.read("final_20251205_pre-twitch_coords.csv", DataFrame)
+function get_pretwitch_df(path::AbstractString = _PRETWITCH_CSV)
+    pretwitch_df = CSV.read(path, DataFrame)
     transform!(pretwitch_df, :cell => ByRow(strip) => :cell)
     return pretwitch_df
 end
@@ -464,22 +471,39 @@ function get_mid_points_by_time(; pretwitch_df=get_pretwitch_df())
     end
 end
 
-R_x_to_y = get_rotation_matrix([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
-R_x_to_z = get_rotation_matrix([1.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-R_rotate_90_about_x = get_rotation_matrix([0.0, 1.0, 0.0], [0.0, 0.0, 1.0])
+# Standard rotation matrices used by interactive plotting helpers below.
+# Wrapped as a function so we don't compute (and cache as globals) on
+# every package load.
+function get_standard_rotations()
+    return (;
+        R_x_to_y = get_rotation_matrix([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+        R_x_to_z = get_rotation_matrix([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
+        R_rotate_90_about_x = get_rotation_matrix([0.0, 1.0, 0.0], [0.0, 0.0, 1.0]),
+    )
+end
 
-H0L_points = get_full_lineage_df(seam_cell_to_lineage_map["H0L"]) |> dataframe_to_point3f_array
-H0R_points = get_full_lineage_df(seam_cell_to_lineage_map["H0R"]) |> dataframe_to_point3f_array
-H0_midpoints = (H0L_points .+ H0R_points) / 2
+# Compute H0 / H2 lineage points and their midpoints from the pretwitch
+# coords. Returns a NamedTuple. Lazy — only called when needed; no
+# top-level CSV read at module load.
+function get_H_points(; pretwitch_df = get_pretwitch_df())
+    H0L_points = get_full_lineage_df(seam_cell_to_lineage_map["H0L"]; pretwitch_df) |> dataframe_to_point3f_array
+    H0R_points = get_full_lineage_df(seam_cell_to_lineage_map["H0R"]; pretwitch_df) |> dataframe_to_point3f_array
+    H2L_points = get_full_lineage_df(seam_cell_to_lineage_map["H2L"]; pretwitch_df) |> dataframe_to_point3f_array
+    H2R_points = get_full_lineage_df(seam_cell_to_lineage_map["H2R"]; pretwitch_df) |> dataframe_to_point3f_array
+    return (;
+        H0L_points, H0R_points,
+        H0_midpoints = (H0L_points .+ H0R_points) ./ 2,
+        H2L_points, H2R_points,
+        H2_midpoints = (H2L_points .+ H2R_points) ./ 2,
+    )
+end
 
-H2R_points = get_full_lineage_df(seam_cell_to_lineage_map["H2R"]) |> dataframe_to_point3f_array
-H2L_points = get_full_lineage_df(seam_cell_to_lineage_map["H2L"]) |> dataframe_to_point3f_array
-H2_midpoints = (H2L_points .+ H2R_points) / 2
+function get_annotation_name_translation_df(path::AbstractString = _NAMING_CORRELATIONS_CSV)
+    return CSV.read(path, DataFrame)
+end
 
-function get_annotation_name_translation_df()
-    # annotation_name_translation_df = CSV.read("ryan_data\\MIPAV_PositionalModel_Packer_Naming_Correlations_v1.csv", DataFrame)
-    annotation_name_translation_df = CSV.read("ryan_data\\MIPAV_PositionalModel_Packer_Naming_Correlations_v5.csv", DataFrame)
-    return annotation_name_translation_df
+function get_color_code_df(path::AbstractString = _COLOR_CODE_CSV)
+    return CSV.read(path, DataFrame)
 end
 
 function best_annotation_name_match(annotation_name; annotation_name_translation_df=get_annotation_name_translation_df())

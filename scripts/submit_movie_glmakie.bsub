@@ -1,0 +1,49 @@
+#!/bin/bash
+# Submit GLMakie GPU movie generation to the LSF gpu_l4 queue.
+#
+# Usage:
+#   bsub < scripts/submit_movie_glmakie.bsub
+#
+# Or with custom h5 / output path:
+#   bsub -env "H5=/path/to/avg.h5,OUT=/path/to/out.mp4" < scripts/submit_movie_glmakie.bsub
+#
+#BSUB -J shroff_movie_glmakie
+#BSUB -P scicompsoft
+#BSUB -q gpu_l4
+#BSUB -gpu "num=1:j_exclusive=yes"
+#BSUB -n 4
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 00:30
+#BSUB -o /groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/movies/movie_glmakie_%J.log
+#BSUB -e /groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl/movies/movie_glmakie_%J.err
+
+set -euo pipefail
+
+REPO=/groups/scicompsoft/home/kittisopikulm/src/ShroffCelegansModels.jl
+JULIA=/groups/scicompsoft/home/kittisopikulm/.juliaup/bin/julia
+
+# /tmp is node-local — use a shared NFS path for the h5 input.
+# Copy the file to /groups first if needed:
+#   cp /tmp/edited_smoothed_average_annotations_*.h5 $REPO/movies/
+H5=${H5:-${REPO}/movies/edited_smoothed_average_annotations_r020_theta020_z030_2026_06_09_110120.h5}
+OUT=${OUT:-${REPO}/movies/test_movie_glmakie.mp4}
+
+echo "Host: $(hostname)"
+echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'n/a')"
+echo "H5:   $H5"
+echo "OUT:  $OUT"
+
+# GLFW on Linux requires a display connection even for offscreen rendering.
+# xvfb-run provides a virtual X11 display.  With NVIDIA's GLVND stack the
+# OpenGL calls may still be dispatched to the physical GPU via GLX; otherwise
+# Mesa (llvmpipe) handles them in software — still often faster than CairoMakie
+# due to SIMD-optimised rasterisation.
+#
+# If VirtualGL is available on this node, prepend "vglrun" before "julia" to
+# force GLX calls onto the NVIDIA GPU:
+#   xvfb-run -a vglrun julia ...
+time xvfb-run -a "$JULIA" --project="${REPO}/glmakie" \
+    "${REPO}/glmakie/scripts/generate_movie_glmakie.jl" \
+    "$H5" "$OUT"
+
+echo "Done: $OUT"
