@@ -47,6 +47,37 @@ function annotation_changes_pending()
     return mtime(changes) > maximum(mtime, outputs)
 end
 
+"""
+    _generate_unsmoothed_movies(unsmoothed_h5_path, output_dir)
+
+Render the unsmoothed counterparts of the meshscatter movies
+(`unsmoothed_movie_{yz,xz}.mp4`, `unsmoothed_combined_movie_{yz,xz}.mp4`) from
+`unsmoothed_h5_path`, for QA/debug comparison against the smoothed movies.
+Also called by `regenerate_viz_only.jl` to rebuild just this set.
+"""
+function _generate_unsmoothed_movies(
+    unsmoothed_h5_path::AbstractString,
+    output_dir::AbstractString,
+)
+    # Load this exact file, NOT via load_latest_average_annotations: that
+    # helper globs for `edited_smoothed_average_annotations_*.h5` and
+    # treats `default_filename` as a fallback only, so it would silently
+    # hand back the *smoothed* HDF5 instead.
+    unsmoothed_avg_dict = ShroffCelegansModels.load_average_annotations(
+        filename = unsmoothed_h5_path,
+    )
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "unsmoothed_movie_$(view).mp4")
+        generate_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+        @info "Unsmoothed movie written" view movie_path
+    end
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "unsmoothed_combined_movie_$(view).mp4")
+        generate_combined_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+        @info "Unsmoothed combined movie written" view movie_path
+    end
+end
+
 function _generate_pipeline_visualizations(
     h5_path::AbstractString,
     unsmoothed_h5_path::Union{Nothing, AbstractString} = nothing,
@@ -85,23 +116,7 @@ function _generate_pipeline_visualizations(
     # failure here must never affect the smoothed outputs.
     if unsmoothed_h5_path !== nothing && isfile(unsmoothed_h5_path)
         try
-            # Load this exact file, NOT via load_latest_average_annotations: that
-            # helper globs for `edited_smoothed_average_annotations_*.h5` and
-            # treats `default_filename` as a fallback only, so it would silently
-            # hand back this run's *smoothed* HDF5 instead.
-            unsmoothed_avg_dict = ShroffCelegansModels.load_average_annotations(
-                filename = unsmoothed_h5_path,
-            )
-            for view in (:yz, :xz)
-                movie_path = joinpath(output_dir, "unsmoothed_movie_$(view).mp4")
-                generate_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
-                @info "Unsmoothed movie written" view movie_path
-            end
-            for view in (:yz, :xz)
-                movie_path = joinpath(output_dir, "unsmoothed_combined_movie_$(view).mp4")
-                generate_combined_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
-                @info "Unsmoothed combined movie written" view movie_path
-            end
+            _generate_unsmoothed_movies(unsmoothed_h5_path, output_dir)
         catch err
             @warn "Unsmoothed movie generation failed (smoothed outputs still valid)" err
         end
