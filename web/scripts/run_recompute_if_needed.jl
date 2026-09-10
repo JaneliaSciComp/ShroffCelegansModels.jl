@@ -47,7 +47,71 @@ function annotation_changes_pending()
     return mtime(changes) > maximum(mtime, outputs)
 end
 
-function _generate_pipeline_visualizations(h5_path::AbstractString)
+"""
+    _generate_unsmoothed_movies(unsmoothed_h5_path, output_dir)
+
+Render the unsmoothed counterparts of the meshscatter movies
+(`unsmoothed_movie_{yz,xz}.mp4`, `unsmoothed_combined_movie_{yz,xz}.mp4`) from
+`unsmoothed_h5_path`, for QA/debug comparison against the smoothed movies.
+Also called by `regenerate_viz_only.jl` to rebuild just this set.
+"""
+function _generate_unsmoothed_movies(
+    unsmoothed_h5_path::AbstractString,
+    output_dir::AbstractString,
+)
+    # Load this exact file, NOT via load_latest_average_annotations: that
+    # helper globs for `edited_smoothed_average_annotations_*.h5` and
+    # treats `default_filename` as a fallback only, so it would silently
+    # hand back the *smoothed* HDF5 instead.
+    unsmoothed_avg_dict = ShroffCelegansModels.load_average_annotations(
+        filename = unsmoothed_h5_path,
+    )
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "unsmoothed_movie_$(view).mp4")
+        generate_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+        @info "Unsmoothed movie written" view movie_path
+    end
+    for view in (:yz, :xz)
+        movie_path = joinpath(output_dir, "unsmoothed_combined_movie_$(view).mp4")
+        generate_combined_meshscatter_movie(unsmoothed_avg_dict; output_path = movie_path, view)
+        @info "Unsmoothed combined movie written" view movie_path
+    end
+end
+
+"""
+    _generate_variant_movies(variant_h5_paths, output_dir)
+
+Render `<token>_movie_{yz,xz}.mp4` for each smoothing-parameter variant, where
+`variant_h5_paths` is an iterable of `(token, h5_path)` pairs.
+
+Only the plain meshscatter movies are rendered for variants — not the combined
+pre+post-twitch pair, which is twice as many frames and adds ~an hour per
+variant without helping compare smoothing settings.
+"""
+function _generate_variant_movies(variant_h5_paths, output_dir::AbstractString)
+    for (token, variant_h5) in variant_h5_paths
+        if !isfile(variant_h5)
+            @warn "Variant HDF5 missing; skipping its movies" token variant_h5
+            continue
+        end
+        try
+            variant_dict = ShroffCelegansModels.load_average_annotations(filename = variant_h5)
+            for view in (:yz, :xz)
+                movie_path = joinpath(output_dir, "$(token)_movie_$(view).mp4")
+                generate_meshscatter_movie(variant_dict; output_path = movie_path, view)
+                @info "Variant movie written" token view movie_path
+            end
+        catch err
+            @warn "Variant movie generation failed (other outputs still valid)" token err
+        end
+    end
+end
+
+function _generate_pipeline_visualizations(
+    h5_path::AbstractString,
+    unsmoothed_h5_path::Union{Nothing, AbstractString} = nothing,
+    variant_h5_paths = (),
+)
     output_dir = get(ENV, "RECOMPUTE_OUTPUT_DIR", "/data/annotations/recompute")
     pipeline_run = Dates.format(Dates.unix2datetime(mtime(h5_path)), "yyyy-mm-ddTHH:MM:SS")
     avg_dict = ShroffCelegansModels.load_latest_average_annotations(
@@ -76,6 +140,19 @@ function _generate_pipeline_visualizations(h5_path::AbstractString)
             @warn "Combined movie generation failed (other outputs still valid)" view err
         end
     end
+
+    # Unsmoothed track: same movies, generated from the unsmoothed HDF5, for
+    # QA/debug comparison against the smoothed movies above. Best-effort — a
+    # failure here must never affect the smoothed outputs.
+    if unsmoothed_h5_path !== nothing && isfile(unsmoothed_h5_path)
+        try
+            _generate_unsmoothed_movies(unsmoothed_h5_path, output_dir)
+        catch err
+            @warn "Unsmoothed movie generation failed (smoothed outputs still valid)" err
+        end
+    end
+
+    _generate_variant_movies(variant_h5_paths, output_dir)
 
     movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
     status = (; pipeline_run, movie_created)
@@ -113,7 +190,11 @@ function run_pipeline(marker)
     @info "Pipeline produced artifacts" result
 
     try
-        _generate_pipeline_visualizations(result.h5_path)
+        _generate_pipeline_visualizations(
+            result.h5_path,
+            result.unsmoothed_h5_path,
+            [(v.token, v.h5_path) for v in result.variant_paths],
+        )
     catch err
         @warn "Visualization generation failed (pipeline outputs still valid)" err
     end

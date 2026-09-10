@@ -18,6 +18,17 @@ Orchestrates the user's 6-step workflow:
   8. Build an intermediate `_for_ben.csv`, then write the explicit-schema
      deliverables (`pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`,
      `combined_<ts>.csv`) and delete the intermediates.
+  9. Repeat steps 7-8 for the pre-smoothing (`unsmoothed`) averaged
+     annotations, writing `edited_unsmoothed_average_annotations_<ts>.h5` and
+     `unsmoothed_{pretwitch,posttwitch,combined}_<ts>.csv` — a QA/debug track
+     kept alongside the smoothed deliverables. Best-effort: failures here
+     never affect the smoothed outputs above.
+  9v. Repeat steps 7-8 once per entry in `smoothing_variants`, writing
+     `smoothing_variant_average_annotations_<token>_<ts>.h5` and
+     `<token>_{pretwitch,posttwitch,combined}_<ts>.csv`, where `<token>` is
+     e.g. `r005_theta007_z004`. Also best-effort, and deliberately *not*
+     named `edited_smoothed_*` so these never win the newest-by-mtime glob
+     the web apps use to choose the dataset they serve.
 
 The function takes no required arguments — it reads its configuration from env
 vars / package defaults — so an LSF wrapper could invoke it identically once
@@ -36,6 +47,19 @@ using GeometryBasics: Point3
 const _DEFAULT_SMOOTH_R = 0.20
 const _DEFAULT_SMOOTH_θ = 0.20
 const _DEFAULT_SMOOTH_Z = 0.30
+
+# Extra smoothing settings emitted alongside the production track for
+# parameter comparison. Each gets its own HDF5 + CSV trio here, and plain
+# yz/xz movies from run_recompute_if_needed.jl.
+#
+# These files are named `smoothing_variant_average_annotations_<token>_<ts>.h5`
+# rather than `edited_smoothed_...` on purpose: the web apps pick the file they
+# serve with a newest-by-mtime glob over `edited_smoothed_average_annotations_*`,
+# so reusing that prefix would let a variant become the served dataset.
+const _DEFAULT_SMOOTHING_VARIANTS = [
+    (r = 0.05, θ = 0.07, z = 0.04),   # smooth_average_annotations' own defaults
+    (r = 0.10, θ = 0.10, z = 0.10),
+]
 
 # Allow running on nodes where /nearline is not mounted (e.g. LSF workers).
 # Set NEARLINE_BASE to the local root that mirrors /nearline — e.g. a directory
@@ -66,6 +90,8 @@ Keyword arguments (all with sensible defaults):
   - `smooth_factor_r`, `smooth_factor_θ`, `smooth_factor_z` — passed to
     `smooth_average_annotations`. Defaults match the production output
     `..._r020_theta020_z030_...`.
+  - `smoothing_variants` — extra `(r, θ, z)` settings to emit for comparison
+    alongside the production track. Pass `[]` to skip them.
 """
 function run_recompute_pipeline(;
     config_path::AbstractString = ShroffCelegansModels.config_path,
@@ -76,6 +102,7 @@ function run_recompute_pipeline(;
     smooth_factor_r::Float64 = _DEFAULT_SMOOTH_R,
     smooth_factor_θ::Float64 = _DEFAULT_SMOOTH_θ,
     smooth_factor_z::Float64 = _DEFAULT_SMOOTH_Z,
+    smoothing_variants = _DEFAULT_SMOOTHING_VARIANTS,
 )
     mkpath(output_dir)
     checkpoint_dir = joinpath(output_dir, "checkpoint")
@@ -254,7 +281,7 @@ function run_recompute_pipeline(;
     # 7. Write HDF5 in the format the meshscatter web app loads.
     h5_path = joinpath(
         output_dir,
-        "edited_smoothed_average_annotations_r$(_factor_token(smooth_factor_r))_theta$(_factor_token(smooth_factor_θ))_z$(_factor_token(smooth_factor_z))_$(ts).h5",
+        "edited_smoothed_average_annotations_$(_smoothing_token(smooth_factor_r, smooth_factor_θ, smooth_factor_z))_$(ts).h5",
     )
     _phase("7/8 write_h5") do
         @info "[7/8] Writing averaged HDF5" h5_path
@@ -316,6 +343,103 @@ function run_recompute_pipeline(;
         end
     end
 
+    # 7u-8u/8. Unsmoothed track: `avg_dict` (pre-6.5, already carries seam
+    #     cells from 6.25) written to its own HDF5, plus the same explicit-CSV
+    #     export as the smoothed deliverable above, marked with an
+    #     `unsmoothed` prefix — for QA/debug comparison against the smoothed
+    #     production outputs. Entirely best-effort: any failure here must
+    #     never affect the smoothed/production deliverables already written.
+    unsmoothed_h5_path = joinpath(output_dir, "edited_unsmoothed_average_annotations_$(ts).h5")
+    unsmoothed_explicit_paths = _phase("7u-8u/8 unsmoothed_export") do
+        try
+            @info "[7u/8] Writing unsmoothed averaged HDF5" unsmoothed_h5_path
+            ShroffCelegansModels.save_average_annotations(avg_dict; filename = unsmoothed_h5_path)
+
+            unsmoothed_ben_csv = replace(unsmoothed_h5_path, ".h5" => "_for_ben.csv")
+            @info "[8u/8] Building intermediate unsmoothed _for_ben CSV" unsmoothed_ben_csv
+            ShroffCelegansModels.resave_for_ben(unsmoothed_h5_path; target_filename = unsmoothed_ben_csv,
+                time_range = (381, 751), canonicalize_cell_names = true)
+
+            res = ShroffCelegansModels.write_combined_explicit_csvs(;
+                output_dir = output_dir,
+                avg_models = avg_models,
+                ben_csv_path = unsmoothed_ben_csv,
+                prefix = "unsmoothed",
+                date_str = ts,
+                add_unsmoothed_seam_cells = false,
+            )
+            @info "[8u/8] Wrote unsmoothed pretwitch/posttwitch/combined CSVs" res.pretwitch_path res.posttwitch_path res.combined_path
+
+            for f in (unsmoothed_ben_csv,
+                      replace(unsmoothed_ben_csv, ".csv" => "_ryan_duplicates.csv"),
+                      replace(unsmoothed_ben_csv, ".csv" => "_ryan_stats.csv"))
+                isfile(f) && rm(f; force=true)
+            end
+
+            return (; res.pretwitch_path, res.posttwitch_path, res.combined_path)
+        catch err
+            @warn "Unsmoothed export failed (smoothed pipeline outputs still valid)" err
+            return nothing
+        end
+    end
+
+    # 9v/8. Smoothing-parameter variants: the same `avg_dict`, smoothed with
+    #     alternative factors, one HDF5 + CSV trio each for comparison against
+    #     the production track above. Smoothing here (rather than re-reading the
+    #     unsmoothed HDF5) also keeps every file in the same raw on-disk LR
+    #     convention — `load_average_annotations` negates LR on read, so a
+    #     save→load→save round trip would store these pre-flipped.
+    #     Each variant is independent and best-effort.
+    variant_paths = _phase("9v/8 smoothing_variants") do
+        results = NamedTuple[]
+        for v in smoothing_variants
+            token = _smoothing_token(v.r, v.θ, v.z)
+            try
+                @info "[9v/8] Smoothing variant" token smooth_factor_r=v.r smooth_factor_θ=v.θ smooth_factor_z=v.z
+                variant = ShroffCelegansModels.smooth_average_annotations(
+                    avg_dict;
+                    smooth_factor_r = v.r,
+                    smooth_factor_θ = v.θ,
+                    smooth_factor_z = v.z,
+                )
+                variant_h5 = joinpath(
+                    output_dir,
+                    "smoothing_variant_average_annotations_$(token)_$(ts).h5",
+                )
+                ShroffCelegansModels.save_average_annotations(variant; filename = variant_h5)
+
+                variant_ben = replace(variant_h5, ".h5" => "_for_ben.csv")
+                ShroffCelegansModels.resave_for_ben(variant_h5;
+                    target_filename = variant_ben, time_range = (381, 751),
+                    canonicalize_cell_names = true)
+                res = ShroffCelegansModels.write_combined_explicit_csvs(;
+                    output_dir = output_dir,
+                    avg_models = avg_models,
+                    ben_csv_path = variant_ben,
+                    prefix = token,
+                    date_str = ts,
+                    add_unsmoothed_seam_cells = false,
+                )
+                for f in (variant_ben,
+                          replace(variant_ben, ".csv" => "_ryan_duplicates.csv"),
+                          replace(variant_ben, ".csv" => "_ryan_stats.csv"))
+                    isfile(f) && rm(f; force=true)
+                end
+                @info "[9v/8] Variant written" token variant_h5 res.pretwitch_path res.posttwitch_path res.combined_path
+                push!(results, (;
+                    token,
+                    h5_path = variant_h5,
+                    pretwitch_path = res.pretwitch_path,
+                    posttwitch_path = res.posttwitch_path,
+                    combined_path = res.combined_path,
+                ))
+            catch err
+                @warn "Smoothing variant failed (other pipeline outputs still valid)" token err
+            end
+        end
+        return results
+    end
+
     # Persist the in-memory caches so future package boots (interactive
     # sessions, web service restarts) load the freshly-recomputed data
     # instead of the stale snapshots baked into the container image.
@@ -357,8 +481,8 @@ function run_recompute_pipeline(;
         @warn "Could not remove checkpoint dir after success" checkpoint_dir err
     end
 
-    @info "Pipeline complete" h5_path explicit_paths n_changes n_timepoints phase_timings
-    return (; h5_path, explicit_paths, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
+    @info "Pipeline complete" h5_path explicit_paths unsmoothed_h5_path unsmoothed_explicit_paths variant_paths n_changes n_timepoints phase_timings
+    return (; h5_path, explicit_paths, unsmoothed_h5_path, unsmoothed_explicit_paths, variant_paths, n_changes, n_timepoints, phase_timings, annotations_cache_h5, my_positions_h5)
 end
 
 # Sweep dated top-level outputs into `archive_<ts>/`, where `<ts>` is the
@@ -496,6 +620,11 @@ function _factor_token(x::Float64)
     s = @sprintf("%03d", round(Int, x * 100))
     return s
 end
+
+# Smoothing settings as they appear in filenames: `r020_theta020_z030`. Also
+# used verbatim as the CSV/movie prefix for the comparison variants.
+_smoothing_token(r, θ, z) =
+    "r$(_factor_token(Float64(r)))_theta$(_factor_token(Float64(θ)))_z$(_factor_token(Float64(z)))"
 
 # Convert a Windows-style cache key path ("X:\foo\bar") to the equivalent
 # Linux path under /nearline/shroff. Legacy `annotations_cache.h5` entries
