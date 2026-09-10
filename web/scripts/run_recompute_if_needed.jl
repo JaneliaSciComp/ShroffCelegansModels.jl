@@ -83,11 +83,14 @@ function _generate_pipeline_visualizations(
     # Unsmoothed track: same movies, generated from the unsmoothed HDF5, for
     # QA/debug comparison against the smoothed movies above. Best-effort — a
     # failure here must never affect the smoothed outputs.
-    if unsmoothed_h5_path !== nothing
+    if unsmoothed_h5_path !== nothing && isfile(unsmoothed_h5_path)
         try
-            unsmoothed_avg_dict = ShroffCelegansModels.load_latest_average_annotations(
-                default_filename = basename(unsmoothed_h5_path),
-                dir = dirname(unsmoothed_h5_path),
+            # Load this exact file, NOT via load_latest_average_annotations: that
+            # helper globs for `edited_smoothed_average_annotations_*.h5` and
+            # treats `default_filename` as a fallback only, so it would silently
+            # hand back this run's *smoothed* HDF5 instead.
+            unsmoothed_avg_dict = ShroffCelegansModels.load_average_annotations(
+                filename = unsmoothed_h5_path,
             )
             for view in (:yz, :xz)
                 movie_path = joinpath(output_dir, "unsmoothed_movie_$(view).mp4")
