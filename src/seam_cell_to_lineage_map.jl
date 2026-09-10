@@ -502,6 +502,70 @@ function get_annotation_name_translation_df(path::AbstractString = _NAMING_CORRE
     return CSV.read(path, DataFrame)
 end
 
+"""
+    canonical_cell_name_map(present_cells;
+        annotation_name_translation_df = get_annotation_name_translation_df())
+        -> Dict{String,String}
+
+Return a map from non-canonical positional cell names to their canonical form,
+for positional names that share an embryonic `Lineage Name` and are identical up
+to letter case. Only names appearing in `present_cells` are considered, and only
+lineages reached by more than one present name produce entries.
+
+The fully-uppercase variant is treated as canonical, e.g. `"P9/10l" => "P9/10L"`.
+Names with no case-variant collision are absent from the map; callers should fall
+back to the original name (`get(map, name, name)`).
+
+This lets the cross-strain average in [`resave_for_ben`](@ref) merge measurements
+recorded under case-variant labels (e.g. `RW10896`'s lowercase `P9/10l`) into one
+equally-weighted average, instead of leaving duplicate rows that both map to the
+same lineage downstream.
+"""
+function canonical_cell_name_map(
+    present_cells;
+    annotation_name_translation_df::DataFrame = get_annotation_name_translation_df(),
+)
+    pos2lin = Dict(
+        annotation_name_translation_df.var"Positional Model Cell Name" .=>
+        annotation_name_translation_df.var"Lineage Name",
+    )
+    present = Set(present_cells)
+
+    # lineage => present positional names mapping to it
+    lineage_to_names = Dict{String, Vector{String}}()
+    for c in present
+        l = get(pos2lin, c, missing)
+        ismissing(l) && continue
+        push!(get!(lineage_to_names, l, String[]), c)
+    end
+
+    canon = Dict{String, String}()
+    for (lineage, names) in lineage_to_names
+        length(names) > 1 || continue
+        # sub-group the colliding names by their uppercased form; only merge
+        # within a case-insensitive group.
+        by_upper = Dict{String, Vector{String}}()
+        for n in names
+            push!(get!(by_upper, uppercase(n), String[]), n)
+        end
+        merged_any = false
+        for (up, variants) in by_upper
+            length(variants) > 1 || continue
+            merged_any = true
+            # prefer the fully-uppercase variant if present, else the uppercased string
+            idx = findfirst(v -> v == uppercase(v), variants)
+            canonical = idx === nothing ? up : variants[idx]
+            for v in variants
+                v == canonical || (canon[v] = canonical)
+            end
+        end
+        if !merged_any
+            @warn "Lineage reached by multiple positional names that are not case-variants; not merging" lineage names
+        end
+    end
+    return canon
+end
+
 function get_color_code_df(path::AbstractString = _COLOR_CODE_CSV)
     return CSV.read(path, DataFrame)
 end

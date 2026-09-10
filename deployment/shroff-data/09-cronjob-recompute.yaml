@@ -1,0 +1,92 @@
+# Runs once daily at 03:00 ET, just after the 02:00 save-modified-times
+# CronJob; checks the shared annotations PVC for a `pending_recompute`
+# marker. When the marker is present, executes the recompute pipeline and
+# removes the marker on success.
+#
+# Schedule lowered from every-15-minutes to once-daily so the cron can't
+# race the long-running manual recompute jobs on the shared
+# /data/annotations/recompute/checkpoint/ directory (see task #41 — both
+# pipelines used the same path; cron's success-path rm wiped the manual
+# job's in-flight checkpoints, producing dozens of H5 ENOENT warnings).
+#
+# Uses the default ServiceAccount — no special RBAC needed because all
+# coordination happens via files on the shared PVC.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: recompute-on-mtime-change
+  namespace: shroff-data
+  labels:
+    app: shroff-data
+    component: recompute-on-mtime-change
+spec:
+  schedule: "0 3 * * *"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # 12h — a cold-cache full N=371 recompute can exceed the previous 4h
+      # (it did once, finishing only via an 8h resume job).
+      activeDeadlineSeconds: 43200
+      template:
+        metadata:
+          labels:
+            app: shroff-data
+            component: recompute-on-mtime-change
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: recompute-on-mtime-change
+              image: image-registry.openshift-image-registry.svc:5000/shroff-data/shroff-data:latest
+              command:
+                - julia
+                # Explicit thread count — NOT --threads=auto. In this cgroup, auto
+                # mis-detects the CPU budget (observed: 1 thread on the old 4-core
+                # pod, 100 threads on a 16-core test pod — it reads the 128-core
+                # node, not the cgroup quota). Pin it to match the cpu limit below
+                # so the step-6 dataset loop (Threads.@threads over 72 datasets)
+                # actually parallelizes. BLAS is pinned to 1 inside that loop in
+                # code (get_group_annotation_positions_over_time.jl) to avoid
+                # nthreads × blas_threads oversubscription.
+                - --threads=16
+                - --project=/app/ShroffCelegansModels.jl/web
+                - /app/ShroffCelegansModels.jl/web/scripts/run_recompute_if_needed.jl
+              workingDir: /app/ShroffCelegansModels.jl
+              env:
+                - name: MODIFIED_TIMES_DIR
+                  value: /data/annotations/modified_times
+                # Production-grade output requires N=371. Override here
+                # (env level) if you ever need a faster validation run with
+                # a different N.
+                - name: N_TIMEPOINTS
+                  value: "371"
+              volumeMounts:
+                - name: nearline
+                  mountPath: /nearline/shroff
+                  readOnly: true
+                - name: annotations
+                  mountPath: /data/annotations
+              # Burstable: guaranteed 4 cores, bursts to 16 when the node has them
+              # free (the step-6 averaging fans out over 72 independent datasets and
+              # scales ~linearly — a 16-thread CPU-bound test hit ~13.85× on this
+              # cluster). Memory raised for the 16 concurrent per-dataset working
+              # sets + per-thread TPS workspaces; the full positions cache (not the
+              # threading) dominates and fit in 8Gi single-threaded, so 32Gi is ample.
+              resources:
+                requests:
+                  memory: 8Gi
+                  cpu: "4"
+                limits:
+                  memory: 32Gi
+                  cpu: "16"
+          volumes:
+            - name: nearline
+              persistentVolumeClaim:
+                claimName: shroff-data-nearline
+            - name: annotations
+              persistentVolumeClaim:
+                claimName: shroff-data-annotations

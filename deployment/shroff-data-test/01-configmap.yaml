@@ -19,6 +19,13 @@ data:
         root /app/ShroffCelegansModels.jl/web/static;
         index index.html;
 
+        # TLS terminates at the OpenShift router; nginx only sees http on :8080.
+        # Without this, nginx-generated redirects (the bare→trailing-slash 301s
+        # below, autoindex dir redirects, proxied 301s) emit an absolute Location
+        # of http://host:8080/… — non-routable externally. Relative redirects let
+        # the browser resolve them against the original https://host request.
+        absolute_redirect off;
+
         location / {
         }
 
@@ -36,6 +43,11 @@ data:
                 return 204;
             }
         }
+
+        # Redirect the bare paths to their trailing-slash form so the autoindex
+        # listing (and relative links within it) resolve correctly.
+        location = /recompute { return 301 /recompute/; }
+        location = /csv_archives { return 301 /csv_archives/; }
 
         location /recompute/ {
             alias /var/www/recompute/;

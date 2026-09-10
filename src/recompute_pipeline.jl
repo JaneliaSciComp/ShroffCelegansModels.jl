@@ -268,7 +268,11 @@ function run_recompute_pipeline(;
     ben_csv = replace(h5_path, ".h5" => "_for_ben.csv")
     _phase("8/8 resave_for_ben") do
         @info "[8/8] Building intermediate _for_ben CSV (consumed by explicit export)" ben_csv
-        ShroffCelegansModels.resave_for_ben(h5_path; target_filename = ben_csv, time_range = (381, 751))
+        # Canonicalize case-variant positional names (e.g. P9/10l -> P9/10L) so
+        # the cross-strain average merges them with equal weight rather than
+        # leaving duplicate lineage rows in the explicit exports.
+        ShroffCelegansModels.resave_for_ben(h5_path; target_filename = ben_csv, time_range = (381, 751),
+            canonicalize_cell_names = true)
     end
 
     # 8a. Explicit-schema CSVs — the deliverables: `pretwitch_<ts>.csv`,
@@ -284,6 +288,10 @@ function run_recompute_pipeline(;
                     avg_models = avg_models,
                     ben_csv_path = ben_csv,
                     date_str = ts,
+                    # Seam cells already arrive (smoothed) via the `seam_cells`
+                    # group in `_for_ben.csv`; don't re-append the unsmoothed
+                    # avg_models copies, which would double-count them.
+                    add_unsmoothed_seam_cells = false,
                 )
                 @info "[8a/8] Wrote explicit pretwitch/posttwitch/combined CSVs" res.pretwitch_path res.posttwitch_path res.combined_path
                 return (; res.pretwitch_path, res.posttwitch_path, res.combined_path)

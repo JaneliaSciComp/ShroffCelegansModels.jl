@@ -47,7 +47,9 @@ function resave_for_ben(
     filename;
     target_filename = replace(filename, ".h5" => "_for_ben.csv"),
     time_range = (381, 751),
-    explicit::Bool = false
+    explicit::Bool = false,
+    canonicalize_cell_names::Bool = true,
+    annotation_name_translation_df::DataFrame = get_annotation_name_translation_df(),
 )
 
     if isfile(target_filename)
@@ -113,6 +115,18 @@ function resave_for_ben(
 
     # Convert to DataFrame (includes strain column)
     df_full = DataFrame(ben_data)
+
+    # Collapse case-variant positional names (e.g. RW10896's lowercase "P9/10l")
+    # onto the canonical name BEFORE the cross-strain average, so the variants are
+    # averaged together with equal per-strain weight instead of producing
+    # duplicate lineage rows downstream.
+    if canonicalize_cell_names
+        canon = canonical_cell_name_map(unique(df_full.cell); annotation_name_translation_df)
+        if !isempty(canon)
+            @info "Canonicalizing case-variant cell names before averaging" canon
+            df_full.cell = get.(Ref(canon), df_full.cell, df_full.cell)
+        end
+    end
 
     # Find cells that appear in multiple strains
     cells_per_strain = combine(groupby(df_full, [:cell, :time]), :strain => (x -> length(unique(x))) => :n_strains)
