@@ -6,7 +6,7 @@ or the CSV sign/columns in `src/demo_averaging/explicit_export.jl` — the avera
 HDF5 (`edited_smoothed_average_annotations_*.h5`) is **numerically unchanged**.
 Only the derived artifacts need rebuilding:
 
-- `meshscatter_latest.html`
+- `meshscatter_latest.html`, `meshscatter_<token>.html`
 - `movie_yz.mp4`, `movie_xz.mp4`
 - `combined_movie_yz.mp4`, `combined_movie_xz.mp4`
 - `pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`, `combined_<ts>.csv`

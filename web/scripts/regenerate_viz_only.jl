@@ -8,7 +8,7 @@ averaged HDF5 itself is unchanged. A full `run_recompute_if_needed.jl` run would
 re-average all timepoints (~hours); this reuses the newest
 `edited_smoothed_average_annotations_*.h5` in place and rebuilds:
 
-  - `meshscatter_latest.html`                      (export_meshscatter_static)
+  - `meshscatter_latest.html`, `meshscatter_<token>.html` (export_meshscatter_static)
   - `movie_yz.mp4`, `movie_xz.mp4`                 (generate_meshscatter_movie)
   - `combined_movie_yz.mp4`, `combined_movie_xz.mp4` (generate_combined_meshscatter_movie)
   - `pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`, `combined_<ts>.csv`
@@ -25,6 +25,7 @@ Likewise for each smoothing-parameter variant
 (`smoothing_variant_average_annotations_<token>_*.h5`, newest per `<token>`):
 
   - `<token>_movie_{yz,xz}.mp4`   (plain movies only, as in the pipeline)
+  - `meshscatter_<token>.html`    (export_meshscatter_static)
   - `<token>_{pretwitch,posttwitch,combined}_<ts>.csv`
 
 `REGEN_VIZ=0` skips the smoothed movies/HTML while still rebuilding the
@@ -201,6 +202,7 @@ function main()
             end
         end
         _generate_variant_movies(variant_h5_paths, output_dir)
+        _generate_variant_static_exports(variant_h5_paths, output_dir)
         if do_csvs || unsmoothed_h5_path !== nothing || !isempty(variant_h5_paths)
             try
                 ShroffCelegansModels._write_recompute_index(output_dir)
