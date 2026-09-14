@@ -2,7 +2,8 @@ using ShroffCelegansModels.ProgressMeter
 using ShroffCelegansModels.Statistics: mean, var
 using ShroffCelegansModels.CoordinateTransformations
 using ShroffCelegansModels.FFTW: fftfreq, fft, ifft, dct, idct
-using ShroffCelegansModels: swapyz_scale, swapyz_unscale, transverse_splines
+using ShroffCelegansModels: swapyz_scale, swapyz_unscale, transverse_splines,
+    smooth_polar_dct1, _blend_to_raw_endpoints
 using ShroffCelegansModels.ColorSchemes: colorschemes
 using ShroffCelegansModels.GeometryBasics: Point3, Point3f
 using ShroffCelegansModels.Observables: throttle
@@ -47,6 +48,8 @@ function show_average_annotations(
         (label="Smooth r", range=0:0.01:1),
         (label="Smooth θ", range=0:0.01:1),
         (label="Smooth z", range=0:0.01:1),
+        (label="Edge Pad", range=0:1:max(1, N_timepoints ÷ 4)),
+        (label="Taper Width", range=0:1:max(1, N_timepoints ÷ 4)),
     )
     slider_range = sliders.sliders[1].range[]
 
@@ -464,19 +467,32 @@ function show_average_annotations(
         notify(sliders.sliders[2].value)
     end
 
+    on(sliders.sliders[5].value) do _
+        notify(sliders.sliders[2].value)
+    end
+
+    on(sliders.sliders[6].value) do _
+        notify(sliders.sliders[2].value)
+    end
+
     on(throttle(0.1, sliders.sliders[2].value)) do smooth_factor
         value = sliders.sliders[1].value[]
         idx = round(Int, value*N_timepoints + 1)
         smooth_factor_θ = sliders.sliders[3].value[]
         smooth_factor_z = sliders.sliders[4].value[]
-        if smooth_factor > 0 || smooth_factor_θ > 0 || smooth_factor_z > 0
+        edge_pad = round(Int, sliders.sliders[5].value[])
+        taper_width = round(Int, sliders.sliders[6].value[])
+        if smooth_factor > 0 || smooth_factor_θ > 0 || smooth_factor_z > 0 ||
+           edge_pad > 0 || taper_width > 0
             # For each annotation, get a smoothed radial position
             _smooth_positions_by_annotation = map(eachindex(common_annotations)) do ann_idx
-                positions = map(_annotation_positions_over_time) do position
+                raw_positions = map(_annotation_positions_over_time) do position
                     position[ann_idx]
                 end
                 #positions = smooth_radial(positions, 1/smooth_factor)
-                positions = smooth_polar_dct1(positions, 1/smooth_factor, 1/smooth_factor_θ, 1/smooth_factor_z)
+                smoothed = smooth_polar_dct1(raw_positions, 1/smooth_factor, 1/smooth_factor_θ,
+                                              1/smooth_factor_z; edge_pad)
+                _blend_to_raw_endpoints(smoothed, raw_positions, taper_width)
             end
             # Swap the indexing so that the primary index is time, then annotation
             _smooth_positions_over_time[] = map(eachindex(_annotation_positions_over_time)) do idx
@@ -605,9 +621,14 @@ function show_average_annotations(
         if isempty(positions_over_time)
             track3d[] = positions_over_time
         else
-            if sliders.sliders[2].value[] > 0 || sliders.sliders[3].value[] > 0 || sliders.sliders[4].value[] > 0
+            edge_pad = round(Int, sliders.sliders[5].value[])
+            taper_width = round(Int, sliders.sliders[6].value[])
+            if sliders.sliders[2].value[] > 0 || sliders.sliders[3].value[] > 0 || sliders.sliders[4].value[] > 0 ||
+               edge_pad > 0 || taper_width > 0
                 # positions_over_time = smooth_radial(positions_over_time, 1/sliders.sliders[2].value[])
-                positions_over_time = smooth_polar_dct1(positions_over_time, 1/sliders.sliders[2].value[], 1/sliders.sliders[3].value[], 1/sliders.sliders[4].value[])
+                smoothed = smooth_polar_dct1(positions_over_time, 1/sliders.sliders[2].value[],
+                                              1/sliders.sliders[3].value[], 1/sliders.sliders[4].value[]; edge_pad)
+                positions_over_time = _blend_to_raw_endpoints(smoothed, positions_over_time, taper_width)
             end
 
             track3d[] = positions_over_time
@@ -771,9 +792,6 @@ function smooth_polar(positions_over_time, σ)
     end
     return positions_over_time
 end
-
-include("smooth_polar_dct1.jl")
-
 
 """
 dct type II
