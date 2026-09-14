@@ -13,7 +13,10 @@ Orchestrates the user's 6-step workflow:
   4. Apply the edits via `update_annotations_cache`.
   5. Compute average lattice models via `get_avg_models(n_timepoints)`.
   6. Compute edited averaged annotations via `average_annotations(...)`, then
-     smooth via `smooth_average_annotations(...)`.
+     smooth via `smooth_average_annotations(...)`. Optional `smooth_edge_pad`
+     and `smooth_taper_width` knobs anchor the smoothed curve closer to the
+     raw first/last timepoint (see their docs below); both default to `0`
+     (disabled), leaving production output unchanged.
   7. Write the smoothed averages to a timestamped HDF5 file.
   8. Build an intermediate `_for_ben.csv`, then write the explicit-schema
      deliverables (`pretwitch_<ts>.csv`, `posttwitch_<ts>.csv`,
@@ -26,9 +29,10 @@ Orchestrates the user's 6-step workflow:
   9v. Repeat steps 7-8 once per entry in `smoothing_variants`, writing
      `smoothing_variant_average_annotations_<token>_<ts>.h5` and
      `<token>_{pretwitch,posttwitch,combined}_<ts>.csv`, where `<token>` is
-     e.g. `r005_theta007_z004`. Also best-effort, and deliberately *not*
-     named `edited_smoothed_*` so these never win the newest-by-mtime glob
-     the web apps use to choose the dataset they serve.
+     e.g. `r005_theta007_z004`, optionally suffixed with `_padN`/`_taperN` when
+     a variant sets `edge_pad`/`taper_width`. Also best-effort, and
+     deliberately *not* named `edited_smoothed_*` so these never win the
+     newest-by-mtime glob the web apps use to choose the dataset they serve.
 
 The function takes no required arguments — it reads its configuration from env
 vars / package defaults — so an LSF wrapper could invoke it identically once
@@ -57,8 +61,13 @@ const _DEFAULT_SMOOTH_Z = 0.30
 # serve with a newest-by-mtime glob over `edited_smoothed_average_annotations_*`,
 # so reusing that prefix would let a variant become the served dataset.
 const _DEFAULT_SMOOTHING_VARIANTS = [
-    (r = 0.05, θ = 0.07, z = 0.04),   # smooth_average_annotations' own defaults
-    (r = 0.10, θ = 0.10, z = 0.10),
+    (r = 0.05, θ = 0.07, z = 0.04, edge_pad = 0, taper_width = 0),   # smooth_average_annotations' own defaults
+    (r = 0.10, θ = 0.10, z = 0.10, edge_pad = 0, taper_width = 0),
+    # Endpoint-anchoring comparisons at the production smoothing factors: one
+    # via edge-replication padding into the FFT filter, one via a post-hoc
+    # raised-cosine blend back to the raw endpoints.
+    (r = _DEFAULT_SMOOTH_R, θ = _DEFAULT_SMOOTH_θ, z = _DEFAULT_SMOOTH_Z, edge_pad = 20, taper_width = 0),
+    (r = _DEFAULT_SMOOTH_R, θ = _DEFAULT_SMOOTH_θ, z = _DEFAULT_SMOOTH_Z, edge_pad = 0, taper_width = 15),
 ]
 
 # Allow running on nodes where /nearline is not mounted (e.g. LSF workers).
@@ -90,8 +99,14 @@ Keyword arguments (all with sensible defaults):
   - `smooth_factor_r`, `smooth_factor_θ`, `smooth_factor_z` — passed to
     `smooth_average_annotations`. Defaults match the production output
     `..._r020_theta020_z030_...`.
-  - `smoothing_variants` — extra `(r, θ, z)` settings to emit for comparison
-    alongside the production track. Pass `[]` to skip them.
+  - `smooth_edge_pad` — replicate each channel's raw endpoint this many
+    timepoints before the FFT filter runs, so the smoothed value near the
+    boundary stays closer to the raw value. Default `0` (disabled).
+  - `smooth_taper_width` — after smoothing, blend back to the raw curve over
+    this many timepoints at each end (raised-cosine taper), exactly matching
+    the raw endpoint at `t=1`/`t=N`. Default `0` (disabled).
+  - `smoothing_variants` — extra `(r, θ, z, edge_pad, taper_width)` settings to
+    emit for comparison alongside the production track. Pass `[]` to skip them.
 """
 function run_recompute_pipeline(;
     config_path::AbstractString = ShroffCelegansModels.config_path,
@@ -102,6 +117,8 @@ function run_recompute_pipeline(;
     smooth_factor_r::Float64 = _DEFAULT_SMOOTH_R,
     smooth_factor_θ::Float64 = _DEFAULT_SMOOTH_θ,
     smooth_factor_z::Float64 = _DEFAULT_SMOOTH_Z,
+    smooth_edge_pad::Int = 0,
+    smooth_taper_width::Int = 0,
     smoothing_variants = _DEFAULT_SMOOTHING_VARIANTS,
 )
     mkpath(output_dir)
@@ -269,19 +286,21 @@ function run_recompute_pipeline(;
     end
 
     smoothed = _phase("6.5/8 smooth") do
-        @info "[6.5/8] Smoothing" smooth_factor_r smooth_factor_θ smooth_factor_z
+        @info "[6.5/8] Smoothing" smooth_factor_r smooth_factor_θ smooth_factor_z smooth_edge_pad smooth_taper_width
         ShroffCelegansModels.smooth_average_annotations(
             avg_dict;
             smooth_factor_r = smooth_factor_r,
             smooth_factor_θ = smooth_factor_θ,
             smooth_factor_z = smooth_factor_z,
+            edge_pad = smooth_edge_pad,
+            taper_width = smooth_taper_width,
         )
     end
 
     # 7. Write HDF5 in the format the meshscatter web app loads.
     h5_path = joinpath(
         output_dir,
-        "edited_smoothed_average_annotations_$(_smoothing_token(smooth_factor_r, smooth_factor_θ, smooth_factor_z))_$(ts).h5",
+        "edited_smoothed_average_annotations_$(_smoothing_token(smooth_factor_r, smooth_factor_θ, smooth_factor_z; edge_pad = smooth_edge_pad, taper_width = smooth_taper_width))_$(ts).h5",
     )
     _phase("7/8 write_h5") do
         @info "[7/8] Writing averaged HDF5" h5_path
@@ -393,14 +412,16 @@ function run_recompute_pipeline(;
     variant_paths = _phase("9v/8 smoothing_variants") do
         results = NamedTuple[]
         for v in smoothing_variants
-            token = _smoothing_token(v.r, v.θ, v.z)
+            token = _smoothing_token(v.r, v.θ, v.z; edge_pad = v.edge_pad, taper_width = v.taper_width)
             try
-                @info "[9v/8] Smoothing variant" token smooth_factor_r=v.r smooth_factor_θ=v.θ smooth_factor_z=v.z
+                @info "[9v/8] Smoothing variant" token smooth_factor_r=v.r smooth_factor_θ=v.θ smooth_factor_z=v.z edge_pad=v.edge_pad taper_width=v.taper_width
                 variant = ShroffCelegansModels.smooth_average_annotations(
                     avg_dict;
                     smooth_factor_r = v.r,
                     smooth_factor_θ = v.θ,
                     smooth_factor_z = v.z,
+                    edge_pad = v.edge_pad,
+                    taper_width = v.taper_width,
                 )
                 variant_h5 = joinpath(
                     output_dir,
@@ -621,10 +642,15 @@ function _factor_token(x::Float64)
     return s
 end
 
-# Smoothing settings as they appear in filenames: `r020_theta020_z030`. Also
+# Smoothing settings as they appear in filenames: `r020_theta020_z030`, with an
+# optional `_padN`/`_taperN` suffix when endpoint anchoring is enabled. Also
 # used verbatim as the CSV/movie prefix for the comparison variants.
-_smoothing_token(r, θ, z) =
-    "r$(_factor_token(Float64(r)))_theta$(_factor_token(Float64(θ)))_z$(_factor_token(Float64(z)))"
+function _smoothing_token(r, θ, z; edge_pad::Int = 0, taper_width::Int = 0)
+    base = "r$(_factor_token(Float64(r)))_theta$(_factor_token(Float64(θ)))_z$(_factor_token(Float64(z)))"
+    edge_pad > 0 && (base *= "_pad$(edge_pad)")
+    taper_width > 0 && (base *= "_taper$(taper_width)")
+    return base
+end
 
 # Convert a Windows-style cache key path ("X:\foo\bar") to the equivalent
 # Linux path under /nearline/shroff. Legacy `annotations_cache.h5` entries
