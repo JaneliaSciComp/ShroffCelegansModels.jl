@@ -57,17 +57,20 @@ function show_average_annotations(
     annotation_text_toggle = Toggle(f)
     pre_warp_toggle = Toggle(f)
     polar_view_toggle = Toggle(f)
+    smooth_seam_cells_toggle = Toggle(f)
     #menu_options = Observable(String["temp"])
     #annotation_menu = Menu(f; options = menu_options)
 
     f[5, 1:3] = toggles = GridLayout()
-    toggles[1, 1:7] = [
+    toggles[1, 1:9] = [
         Label(f, "Annnotation text"),
         annotation_text_toggle,
         Label(f, "Pre-warp"),
         pre_warp_toggle,
         Label(f, "Polar View"),
         polar_view_toggle,
+        Label(f, "Smooth Seam Cells"),
+        smooth_seam_cells_toggle,
         Label(f, "Annotation"),
     ]
 
@@ -158,7 +161,7 @@ function show_average_annotations(
     seam_cell_text = [replace.(model.names[1:2:end], 'L' => 'R'); model.names[1:2:end]]
     #menu_options[] = [common_annotations; seam_cell_text]
     annotation_menu = Menu(f; options = [common_annotations; seam_cell_text])
-    toggles[1,8] = annotation_menu
+    toggles[1,10] = annotation_menu
 
     _mesh = Observable(ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale))
     #_lines = Observable(swapyz.(cross_sections_at_knots(model)))
@@ -248,6 +251,14 @@ function show_average_annotations(
         _model = avg_models[j]
         seam_cell_pts(_model, n_upsample)
     end
+
+    # Pre-transformed into render (swapyz_scale'd) coordinates, matching
+    # _annotation_positions_over_time, so smooth_polar_dct1's r/θ decomposition
+    # is consistent between annotations and seam cells.
+    seam_cell_positions_over_time_swapyz = map(seam_cell_positions_over_time) do positions
+        swapyz_scale.(positions)
+    end
+    _smooth_seam_cell_positions_over_time = Observable(seam_cell_positions_over_time_swapyz)
 
     #_annotation_positions_over_time = [_annotation_positions_over_time; seam_cell_positions_over_time]
     _smooth_positions_over_time = Observable(_annotation_positions_over_time)
@@ -405,7 +416,11 @@ function show_average_annotations(
         _mesh[] = ShroffCelegansModels.get_model_contour_mesh(model; transform_points=swapyz_scale)
         _color[] = repeat(color, length(model))
         # title[] = "Average over $config_path\n$(dataset.path), t = $value; number of cross sections: $n_sections"
-        _seam_cells[] = swapyz_scale.(seam_cell_pts(model, n_upsample))
+        _seam_cells[] = if smooth_seam_cells_toggle.active[]
+            _smooth_seam_cell_positions_over_time[][idx]
+        else
+            swapyz_scale.(seam_cell_pts(model, n_upsample))
+        end
         _seam_cell_labels[] = _seam_cells[] .- Ref(Point3f(2,0,0))
         if sliders.sliders[2].value[] > 0
             _annotation_cells[] = _smooth_positions_over_time[][idx]
@@ -475,6 +490,10 @@ function show_average_annotations(
         notify(sliders.sliders[2].value)
     end
 
+    on(smooth_seam_cells_toggle.active) do _
+        notify(sliders.sliders[2].value)
+    end
+
     on(throttle(0.1, sliders.sliders[2].value)) do smooth_factor
         value = sliders.sliders[1].value[]
         idx = round(Int, value*N_timepoints + 1)
@@ -512,6 +531,28 @@ function show_average_annotations(
                 _selected_annotation[] = _annotation_positions_over_time[idx][a]
             end
         end
+
+        # Same smoothing, applied per seam cell instead of per annotation, so
+        # the 3D meshscatter of all seam cells can optionally track it too.
+        _smooth_seam_cell_positions_by_cell = map(eachindex(seam_cell_positions_over_time_swapyz[1])) do cell_idx
+            raw_positions = map(seam_cell_positions_over_time_swapyz) do position
+                position[cell_idx]
+            end
+            smoothed = smooth_polar_dct1(raw_positions, 1/smooth_factor, 1/smooth_factor_θ,
+                                          1/smooth_factor_z; edge_pad)
+            _blend_to_raw_endpoints(smoothed, raw_positions, taper_width)
+        end
+        _smooth_seam_cell_positions_over_time[] = map(eachindex(seam_cell_positions_over_time_swapyz)) do t
+            map(_smooth_seam_cell_positions_by_cell) do position
+                position[t]
+            end
+        end
+        if smooth_seam_cells_toggle.active[]
+            _seam_cells[] = _smooth_seam_cell_positions_over_time[][idx]
+        else
+            _seam_cells[] = swapyz_scale.(seam_cell_pts(avg_models[idx], n_upsample))
+        end
+        _seam_cell_labels[] = _seam_cells[] .- Ref(Point3f(2,0,0))
 
         notify(annotation_menu.selection)
         #=
