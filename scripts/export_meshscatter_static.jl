@@ -218,6 +218,24 @@ function export_meshscatter_static(average_annotations_dict;
                 if (el) el.textContent = "hpf = " + hours + ":" + String(minutes).padStart(2, "0");
             }""")
 
+            # Selection highlight: an enlarged, translucent red cube around the
+            # hovered point. Positioned/hidden via JS in the mousemove handler
+            # below, reusing the same GPU buffer write-back technique
+            # (`plot_object.update([[key, buffer]])`) already used for the
+            # slider animation above. Starts at NaN (Makie's own idiom for a
+            # hidden marker excluded from scene/data-limits computation — see
+            # `_selected_annotation = Observable(Point3(NaN))` in
+            # show_average_annotations.jl; a real far-away coordinate instead
+            # of NaN was tried first and blew up the camera framing, since it
+            # gets included in the exported scene's bounds). Deliberately built
+            # outside the `plots`/`names_by_uuid` loop above so it's never
+            # slider-animated and never becomes a named/pickable tooltip target.
+            highlight_marker = normal_mesh(Rect3f(Point3f(-0.5), Vec3f(1)))
+            highlight = meshscatter!(ax, [Point3f(NaN)]; marker = highlight_marker,
+                markersize = 2.5, color = (:red, 0.35), transparency = true,
+                inspectable = false)
+            highlight_uuid = WGLMakie.js_uuid(highlight)
+
             # DataInspector-style hover tooltip. The standard Makie DataInspector
             # computes its label via a Julia callback on mouse events, which can't run
             # in a server-less export. Instead we do the picking + label entirely
@@ -227,17 +245,22 @@ function export_meshscatter_static(average_annotations_dict;
             # correct regardless of ancestor positioning/scroll.
             tooltip = DOM.div(""; id = "inspector-tooltip", style = Styles(CSS(
                 "position" => "fixed", "display" => "none", "z-index" => "20",
-                "background" => "rgba(0,0,0,0.82)", "color" => "white",
-                "padding" => "4px 8px", "border-radius" => "4px",
-                "font-family" => "sans-serif", "font-size" => "14px",
+                "background" => "rgba(0,0,0,0.92)", "color" => "#fff",
+                "padding" => "6px 10px", "border-radius" => "6px",
+                "border" => "1px solid rgba(255,255,255,0.35)",
+                "box-shadow" => "0 2px 8px rgba(0,0,0,0.6)",
+                "font-family" => "sans-serif", "font-size" => "16px", "font-weight" => "600",
                 "pointer-events" => "none", "white-space" => "nowrap")))
             Bonito.evaljs(session, js"""
-                Promise.all([$(WGLMakie.WGL), $(ax.scene)]).then(([WGL, scene]) => {
+                Promise.all([$(WGLMakie.WGL), $(ax.scene), $(highlight)]).then(([WGL, scene, highlightPlots]) => {
                     if (!scene || !scene.screen) { return; }
                     const canvas = scene.screen.canvas;
                     const lookup = $(names_by_uuid);
                     const tip = $(tooltip);
                     const POS_KEY = $(POS_BUFFER_KEY);
+                    const highlightObj = highlightPlots[0].plot_object;
+                    const highlightUuid = $(highlight_uuid);
+                    const HIDDEN = new Float32Array([NaN, NaN, NaN]);
                     canvas.addEventListener("mousemove", (event) => {
                         const xy = WGL.events2unitless(scene.screen, event);
                         // 1x1 pick: only fires when the cursor is actually over a point
@@ -248,6 +271,10 @@ function export_meshscatter_static(average_annotations_dict;
                             const picks = picked[1];
                             if (picks.length === 1) {
                                 const [plot, index] = picks[0];
+                                // Self-hit on the highlight cube itself (it now sits at the
+                                // same spot as the point underneath) -> keep prior state
+                                // rather than treating it as "no point here" and flickering.
+                                if (plot.plot_uuid === highlightUuid) { return; }
                                 const names = lookup[plot.plot_uuid];
                                 if (names) {
                                     const name = (names[index] !== undefined) ? names[index] : "?";
@@ -259,6 +286,7 @@ function export_meshscatter_static(average_annotations_dict;
                                         const a = attr.array;
                                         const x = a[index*3], y = a[index*3+1], z = a[index*3+2];
                                         coord = " (" + x.toFixed(1) + ", " + y.toFixed(1) + ", " + z.toFixed(1) + ")";
+                                        highlightObj.update([[POS_KEY, new Float32Array([x, y, z])]]);
                                     }
                                     tip.innerText = name + coord;
                                     tip.style.left = (event.clientX + 12) + "px";
@@ -269,8 +297,12 @@ function export_meshscatter_static(average_annotations_dict;
                             }
                         }
                         tip.style.display = "none";
+                        highlightObj.update([[POS_KEY, HIDDEN]]);
                     });
-                    canvas.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+                    canvas.addEventListener("mouseleave", () => {
+                        tip.style.display = "none";
+                        highlightObj.update([[POS_KEY, HIDDEN]]);
+                    });
 
                     // Camera reconcile kick. In attach_3d_camera, the makie projection
                     // is only rebuilt (update_matrices) from the OrbitControls "change"
