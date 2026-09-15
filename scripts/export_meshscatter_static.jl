@@ -239,10 +239,22 @@ function export_meshscatter_static(average_annotations_dict;
             # DataInspector-style hover tooltip. The standard Makie DataInspector
             # computes its label via a Julia callback on mouse events, which can't run
             # in a server-less export. Instead we do the picking + label entirely
-            # client-side: on mousemove, WGL.pick_closest returns [plot_uuid, index];
-            # we look the annotation name up in the embedded uuid→names map and show a
+            # client-side: on mousemove, WGL.pick_native returns [plot, index]; we
+            # look the annotation name up in the embedded uuid→names map and show a
             # DOM tooltip at the cursor. position:fixed + clientX/Y keeps placement
             # correct regardless of ancestor positioning/scroll.
+            #
+            # Pick against fig.scene (the ROOT scene), NOT ax.scene: WGLMakie's own
+            # Julia-side picking.jl always does the same. Why it matters: the picking
+            # render pass sets `renderer.autoClear = scene.clearscene.value`, and
+            # `clearscene` defaults to `true` only for an opaque-background scene
+            # (the root Figure) — a transparent-background LScene like `ax` has it
+            # `false`. Picking against ax.scene therefore never clears the picking
+            # render-target between calls, so after rotating the camera, stale
+            # (plot, index) values from earlier orientations linger in untouched
+            # pixels — producing tooltips over what is now empty space. The main
+            # color-buffer render never shows this because it always renders from
+            # the root scene every frame (which does clear).
             tooltip = DOM.div(""; id = "inspector-tooltip", style = Styles(CSS(
                 "position" => "fixed", "display" => "none", "z-index" => "20",
                 "background" => "rgba(0,0,0,0.92)", "color" => "#fff",
@@ -252,7 +264,7 @@ function export_meshscatter_static(average_annotations_dict;
                 "font-family" => "sans-serif", "font-size" => "16px", "font-weight" => "600",
                 "pointer-events" => "none", "white-space" => "nowrap")))
             Bonito.evaljs(session, js"""
-                Promise.all([$(WGLMakie.WGL), $(ax.scene), $(highlight)]).then(([WGL, scene, highlightPlots]) => {
+                Promise.all([$(WGLMakie.WGL), $(fig.scene), $(highlight)]).then(([WGL, scene, highlightPlots]) => {
                     if (!scene || !scene.screen) { return; }
                     const canvas = scene.screen.canvas;
                     const lookup = $(names_by_uuid);
