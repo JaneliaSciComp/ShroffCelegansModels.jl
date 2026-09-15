@@ -346,9 +346,66 @@ function export_meshscatter_static(average_annotations_dict;
 
             # Make the native range input stretch to fill its (flex) container.
             slider_css = DOM.style("input[type=range]{width:100%; accent-color:#38bdf8; height:6px;}")
+
+            # Play/Pause: drives the SAME native range input the user would
+            # drag by hand, via a synthetic "input" event — reusing every
+            # existing onjs(sg.value, ...) listener (position animation, HPF
+            # label) for free instead of duplicating that logic. 48 fps,
+            # matching the frame rate of the exported movies
+            # (generate_meshscatter_movie); loops back to the start at the
+            # end, matching the exported movies' `loop` playback too.
+            play_button = DOM.button("▶ Play"; id = "play-button", style = Styles(CSS(
+                "background" => "#38bdf8", "color" => "#0f172a", "border" => "none",
+                "border-radius" => "6px", "padding" => "6px 14px",
+                "font-family" => "sans-serif", "font-size" => "0.95rem", "font-weight" => "700",
+                "cursor" => "pointer", "flex" => "0 0 auto")))
+            Bonito.evaljs(session, js"""
+                const btn = $(play_button);
+                const slider = document.querySelector('input[type=range]');
+                const T0 = $(t0);
+                const T_LAST = $(t_last);
+                const FRAME_MS = 1000 / 48;
+                let playing = false;
+                let rafId = null;
+                let lastTime = 0;
+
+                function step(now) {
+                    if (!playing) return;
+                    if (lastTime === 0) lastTime = now;
+                    // Advance by however many 48fps frames have actually
+                    // elapsed (can be >1), not just one per callback -- some
+                    // browsers throttle requestAnimationFrame below 48Hz for
+                    // background/offscreen tabs, and this keeps playback at
+                    // the correct wall-clock rate regardless of how often
+                    // this callback itself fires.
+                    const framesElapsed = Math.floor((now - lastTime) / FRAME_MS);
+                    if (framesElapsed > 0) {
+                        lastTime += framesElapsed * FRAME_MS;
+                        const range = T_LAST - T0 + 1;
+                        let val = Math.round(parseFloat(slider.value)) - T0 + framesElapsed;
+                        val = T0 + ((val % range) + range) % range;
+                        slider.value = val;
+                        slider.dispatchEvent(new Event('input', {bubbles: true}));
+                    }
+                    rafId = requestAnimationFrame(step);
+                }
+
+                btn.addEventListener('click', () => {
+                    playing = !playing;
+                    btn.textContent = playing ? '⏸ Pause' : '▶ Play';
+                    if (playing) {
+                        lastTime = 0;
+                        rafId = requestAnimationFrame(step);
+                    } else if (rafId) {
+                        cancelAnimationFrame(rafId);
+                    }
+                });
+            """)
+
             card = DOM.div(
                 slider_css, fig_box,
                 DOM.div(
+                    play_button,
                     DOM.span("Time"; style = Styles(CSS(
                         "color" => "#cbd5e1", "font-weight" => "700",
                         "font-family" => "sans-serif", "font-size" => "0.95rem"))),
