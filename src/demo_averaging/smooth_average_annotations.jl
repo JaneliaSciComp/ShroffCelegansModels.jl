@@ -1,19 +1,25 @@
 include("smooth_polar_dct1.jl")
 
-function _endpoint_taper_weights(N::Int, taper_width::Int)
-    w = zeros(Float64, N)
-    taper_width <= 0 && return w
-    for t in 1:N
-        d = min(t - 1, N - t)   # distance from the nearer end, 0 at the very ends
-        w[t] = d >= taper_width ? 0.0 : (cos(π * d / taper_width) + 1) / 2
-    end
-    return w
-end
+_endpoint_pin_weight(d::Int, taper_width::Int) =
+    d >= taper_width ? 0.0 : (cos(π * d / taper_width) + 1) / 2
 
+# Pins `smoothed` to `raw`'s exact endpoint values by adding a smooth
+# (raised-cosine) correction that equals the raw/smoothed mismatch at t=1/t=N
+# and decays to 0 by `taper_width` timepoints in. Blending toward `raw` itself
+# (as an earlier version of this did) reintroduces raw's full high-frequency
+# content everywhere inside the taper window, not just at the two endpoints;
+# this correction is a constant offset shaped by a smooth taper, so it carries
+# no per-timepoint noise from `raw`.
 function _blend_to_raw_endpoints(smoothed, raw, taper_width::Int)
     taper_width <= 0 && return smoothed
-    w = _endpoint_taper_weights(length(smoothed), taper_width)
-    return [w[t] .* raw[t] .+ (1 - w[t]) .* smoothed[t] for t in eachindex(smoothed)]
+    N = length(smoothed)
+    offset_start = raw[1] .- smoothed[1]
+    offset_end = raw[end] .- smoothed[end]
+    return map(eachindex(smoothed)) do t
+        w_start = _endpoint_pin_weight(t - 1, taper_width)
+        w_end = _endpoint_pin_weight(N - t, taper_width)
+        smoothed[t] .+ w_start .* offset_start .+ w_end .* offset_end
+    end
 end
 
 let DICT_TYPE = Dict{
