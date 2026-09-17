@@ -162,6 +162,12 @@ next service restart without code changes.
 
 The directory is scanned for files matching `prefix*.h5` and the newest by
 mtime is chosen.
+
+`default_filename` is a *fallback*, not a request: whenever the scan matches
+anything, the newest match wins and `default_filename` is discarded. To load
+one specific file, call [`load_average_annotations`](@ref) directly, or pass a
+`prefix` that matches it — passing it as `default_filename` alone will not
+work.
 """
 function load_latest_average_annotations(;
     default_filename::AbstractString,
@@ -176,6 +182,12 @@ function load_latest_average_annotations(;
         ]
         if !isempty(candidates)
             chosen = argmax(mtime, candidates)
+            # A default_filename outside `prefix` means the caller wanted that
+            # specific file; the scan silently overriding it is a footgun (it
+            # once fed smoothed data to the unsmoothed movie export).
+            if !startswith(basename(default_filename), prefix)
+                @warn "Prefix scan overrode a default_filename that does not match `prefix`; pass `prefix` or call load_average_annotations for a specific file" chosen default_filename prefix
+            end
         end
     end
     @info "Loading averaged annotations" chosen default_filename dir

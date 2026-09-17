@@ -218,26 +218,61 @@ function export_meshscatter_static(average_annotations_dict;
                 if (el) el.textContent = "hpf = " + hours + ":" + String(minutes).padStart(2, "0");
             }""")
 
+            # Selection highlight: an enlarged, translucent red cube around the
+            # hovered point. Positioned/hidden via JS in the mousemove handler
+            # below, reusing the same GPU buffer write-back technique
+            # (`plot_object.update([[key, buffer]])`) already used for the
+            # slider animation above. Starts at NaN (Makie's own idiom for a
+            # hidden marker excluded from scene/data-limits computation — see
+            # `_selected_annotation = Observable(Point3(NaN))` in
+            # show_average_annotations.jl; a real far-away coordinate instead
+            # of NaN was tried first and blew up the camera framing, since it
+            # gets included in the exported scene's bounds). Deliberately built
+            # outside the `plots`/`names_by_uuid` loop above so it's never
+            # slider-animated and never becomes a named/pickable tooltip target.
+            highlight_marker = normal_mesh(Rect3f(Point3f(-0.5), Vec3f(1)))
+            highlight = meshscatter!(ax, [Point3f(NaN)]; marker = highlight_marker,
+                markersize = 2.5, color = (:red, 0.35), transparency = true,
+                inspectable = false)
+            highlight_uuid = WGLMakie.js_uuid(highlight)
+
             # DataInspector-style hover tooltip. The standard Makie DataInspector
             # computes its label via a Julia callback on mouse events, which can't run
             # in a server-less export. Instead we do the picking + label entirely
-            # client-side: on mousemove, WGL.pick_closest returns [plot_uuid, index];
-            # we look the annotation name up in the embedded uuid→names map and show a
+            # client-side: on mousemove, WGL.pick_native returns [plot, index]; we
+            # look the annotation name up in the embedded uuid→names map and show a
             # DOM tooltip at the cursor. position:fixed + clientX/Y keeps placement
             # correct regardless of ancestor positioning/scroll.
+            #
+            # Pick against fig.scene (the ROOT scene), NOT ax.scene: WGLMakie's own
+            # Julia-side picking.jl always does the same. Why it matters: the picking
+            # render pass sets `renderer.autoClear = scene.clearscene.value`, and
+            # `clearscene` defaults to `true` only for an opaque-background scene
+            # (the root Figure) — a transparent-background LScene like `ax` has it
+            # `false`. Picking against ax.scene therefore never clears the picking
+            # render-target between calls, so after rotating the camera, stale
+            # (plot, index) values from earlier orientations linger in untouched
+            # pixels — producing tooltips over what is now empty space. The main
+            # color-buffer render never shows this because it always renders from
+            # the root scene every frame (which does clear).
             tooltip = DOM.div(""; id = "inspector-tooltip", style = Styles(CSS(
                 "position" => "fixed", "display" => "none", "z-index" => "20",
-                "background" => "rgba(0,0,0,0.82)", "color" => "white",
-                "padding" => "4px 8px", "border-radius" => "4px",
-                "font-family" => "sans-serif", "font-size" => "14px",
+                "background" => "rgba(0,0,0,0.92)", "color" => "#fff",
+                "padding" => "6px 10px", "border-radius" => "6px",
+                "border" => "1px solid rgba(255,255,255,0.35)",
+                "box-shadow" => "0 2px 8px rgba(0,0,0,0.6)",
+                "font-family" => "sans-serif", "font-size" => "16px", "font-weight" => "600",
                 "pointer-events" => "none", "white-space" => "nowrap")))
             Bonito.evaljs(session, js"""
-                Promise.all([$(WGLMakie.WGL), $(ax.scene)]).then(([WGL, scene]) => {
+                Promise.all([$(WGLMakie.WGL), $(fig.scene), $(highlight)]).then(([WGL, scene, highlightPlots]) => {
                     if (!scene || !scene.screen) { return; }
                     const canvas = scene.screen.canvas;
                     const lookup = $(names_by_uuid);
                     const tip = $(tooltip);
                     const POS_KEY = $(POS_BUFFER_KEY);
+                    const highlightObj = highlightPlots[0].plot_object;
+                    const highlightUuid = $(highlight_uuid);
+                    const HIDDEN = new Float32Array([NaN, NaN, NaN]);
                     canvas.addEventListener("mousemove", (event) => {
                         const xy = WGL.events2unitless(scene.screen, event);
                         // 1x1 pick: only fires when the cursor is actually over a point
@@ -248,6 +283,10 @@ function export_meshscatter_static(average_annotations_dict;
                             const picks = picked[1];
                             if (picks.length === 1) {
                                 const [plot, index] = picks[0];
+                                // Self-hit on the highlight cube itself (it now sits at the
+                                // same spot as the point underneath) -> keep prior state
+                                // rather than treating it as "no point here" and flickering.
+                                if (plot.plot_uuid === highlightUuid) { return; }
                                 const names = lookup[plot.plot_uuid];
                                 if (names) {
                                     const name = (names[index] !== undefined) ? names[index] : "?";
@@ -259,6 +298,7 @@ function export_meshscatter_static(average_annotations_dict;
                                         const a = attr.array;
                                         const x = a[index*3], y = a[index*3+1], z = a[index*3+2];
                                         coord = " (" + x.toFixed(1) + ", " + y.toFixed(1) + ", " + z.toFixed(1) + ")";
+                                        highlightObj.update([[POS_KEY, new Float32Array([x, y, z])]]);
                                     }
                                     tip.innerText = name + coord;
                                     tip.style.left = (event.clientX + 12) + "px";
@@ -269,8 +309,12 @@ function export_meshscatter_static(average_annotations_dict;
                             }
                         }
                         tip.style.display = "none";
+                        highlightObj.update([[POS_KEY, HIDDEN]]);
                     });
-                    canvas.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+                    canvas.addEventListener("mouseleave", () => {
+                        tip.style.display = "none";
+                        highlightObj.update([[POS_KEY, HIDDEN]]);
+                    });
 
                     // Camera reconcile kick. In attach_3d_camera, the makie projection
                     // is only rebuilt (update_matrices) from the OrbitControls "change"
@@ -302,9 +346,66 @@ function export_meshscatter_static(average_annotations_dict;
 
             # Make the native range input stretch to fill its (flex) container.
             slider_css = DOM.style("input[type=range]{width:100%; accent-color:#38bdf8; height:6px;}")
+
+            # Play/Pause: drives the SAME native range input the user would
+            # drag by hand, via a synthetic "input" event — reusing every
+            # existing onjs(sg.value, ...) listener (position animation, HPF
+            # label) for free instead of duplicating that logic. 48 fps,
+            # matching the frame rate of the exported movies
+            # (generate_meshscatter_movie); loops back to the start at the
+            # end, matching the exported movies' `loop` playback too.
+            play_button = DOM.button("▶ Play"; id = "play-button", style = Styles(CSS(
+                "background" => "#38bdf8", "color" => "#0f172a", "border" => "none",
+                "border-radius" => "6px", "padding" => "6px 14px",
+                "font-family" => "sans-serif", "font-size" => "0.95rem", "font-weight" => "700",
+                "cursor" => "pointer", "flex" => "0 0 auto")))
+            Bonito.evaljs(session, js"""
+                const btn = $(play_button);
+                const slider = document.querySelector('input[type=range]');
+                const T0 = $(t0);
+                const T_LAST = $(t_last);
+                const FRAME_MS = 1000 / 48;
+                let playing = false;
+                let rafId = null;
+                let lastTime = 0;
+
+                function step(now) {
+                    if (!playing) return;
+                    if (lastTime === 0) lastTime = now;
+                    // Advance by however many 48fps frames have actually
+                    // elapsed (can be >1), not just one per callback -- some
+                    // browsers throttle requestAnimationFrame below 48Hz for
+                    // background/offscreen tabs, and this keeps playback at
+                    // the correct wall-clock rate regardless of how often
+                    // this callback itself fires.
+                    const framesElapsed = Math.floor((now - lastTime) / FRAME_MS);
+                    if (framesElapsed > 0) {
+                        lastTime += framesElapsed * FRAME_MS;
+                        const range = T_LAST - T0 + 1;
+                        let val = Math.round(parseFloat(slider.value)) - T0 + framesElapsed;
+                        val = T0 + ((val % range) + range) % range;
+                        slider.value = val;
+                        slider.dispatchEvent(new Event('input', {bubbles: true}));
+                    }
+                    rafId = requestAnimationFrame(step);
+                }
+
+                btn.addEventListener('click', () => {
+                    playing = !playing;
+                    btn.textContent = playing ? '⏸ Pause' : '▶ Play';
+                    if (playing) {
+                        lastTime = 0;
+                        rafId = requestAnimationFrame(step);
+                    } else if (rafId) {
+                        cancelAnimationFrame(rafId);
+                    }
+                });
+            """)
+
             card = DOM.div(
                 slider_css, fig_box,
                 DOM.div(
+                    play_button,
                     DOM.span("Time"; style = Styles(CSS(
                         "color" => "#cbd5e1", "font-weight" => "700",
                         "font-family" => "sans-serif", "font-size" => "0.95rem"))),
