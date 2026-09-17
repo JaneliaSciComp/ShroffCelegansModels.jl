@@ -107,6 +107,40 @@ function _generate_variant_movies(variant_h5_paths, output_dir::AbstractString)
     end
 end
 
+"""
+    _generate_variant_static_exports(variant_h5_paths, output_dir)
+
+Write `meshscatter_<token>.html` (export_meshscatter_static) for each
+smoothing-parameter variant, where `variant_h5_paths` is an iterable of
+`(token, h5_path)` pairs. Best-effort per variant, mirroring
+`_generate_variant_movies`.
+"""
+function _generate_variant_static_exports(variant_h5_paths, output_dir::AbstractString)
+    for (token, variant_h5) in variant_h5_paths
+        if !isfile(variant_h5)
+            @warn "Variant HDF5 missing; skipping its static export" token variant_h5
+            continue
+        end
+        try
+            variant_dict = ShroffCelegansModels.load_average_annotations(filename = variant_h5)
+            export_path = joinpath(output_dir, "meshscatter_$(token).html")
+            export_meshscatter_static(variant_dict; output_path = export_path)
+            @info "Variant static export written" token export_path
+        catch err
+            @warn "Variant static export failed (other outputs still valid)" token err
+        end
+    end
+end
+
+# Extracts the `r020_theta020_z030[_pad20][_taper15]`-style smoothing token
+# embedded in a pipeline output filename, matching either the production
+# (`edited_smoothed_average_annotations_`) or variant
+# (`smoothing_variant_average_annotations_`) naming convention.
+function _extract_smoothing_token(h5_path::AbstractString)
+    m = match(r"r\d{3}_theta\d{3}_z\d{3}(?:_pad\d+)?(?:_taper\d+)?", basename(h5_path))
+    return m === nothing ? nothing : m.match
+end
+
 function _generate_pipeline_visualizations(
     h5_path::AbstractString,
     unsmoothed_h5_path::Union{Nothing, AbstractString} = nothing,
@@ -120,7 +154,13 @@ function _generate_pipeline_visualizations(
     )
 
     export_path = joinpath(output_dir, "meshscatter_latest.html")
-    export_meshscatter_static(avg_dict; output_path = export_path)
+    try
+        export_meshscatter_static(avg_dict; output_path = export_path)
+        token = _extract_smoothing_token(h5_path)
+        token === nothing || cp(export_path, joinpath(output_dir, "meshscatter_$(token).html"); force = true)
+    catch err
+        @warn "Static export generation failed (other outputs still valid)" err
+    end
 
     for view in (:yz, :xz)
         movie_path = joinpath(output_dir, "movie_$(view).mp4")
@@ -153,6 +193,7 @@ function _generate_pipeline_visualizations(
     end
 
     _generate_variant_movies(variant_h5_paths, output_dir)
+    _generate_variant_static_exports(variant_h5_paths, output_dir)
 
     movie_created = Dates.format(now(), "yyyy-mm-ddTHH:MM:SS")
     status = (; pipeline_run, movie_created)
