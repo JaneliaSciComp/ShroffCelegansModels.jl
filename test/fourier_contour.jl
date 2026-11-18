@@ -113,3 +113,113 @@ end
     t1, _, d1 = FC.nearest_central_pt(model, pts, efs; fourier_contour = false)
     @test t0 == t1 && d0 == d1
 end
+
+@testset "FourierContour orientation" begin
+    FC = ShroffCelegansModels
+    # Asymmetric profile: orient=-1 with radii sampled in the opposite sense
+    # must reproduce the same physical contour.
+    N = 16
+    f(θ) = 6 + 2cos(θ) + 1.5sin(2θ) + 0.5sin(θ)
+    θs = 2π .* (0:N-1) ./ N
+    cpos = synthetic_contour(f.(θs))
+    cneg = FC.FourierContour([Point3(0.0, 0, 0)], [Point3(0.0, 0, 1)], [Point3(1.0, 0, 0)],
+        reshape(f.(-θs), :, 1), -1.0)
+    for θ in range(-π, π, length = 21)
+        @test FC.contour_radius(cpos, 1, inplane(θ)) ≈ f(θ) atol = 1e-6
+        @test FC.contour_radius(cneg, 1, inplane(θ)) ≈ f(θ) atol = 1e-6
+    end
+
+    # Real model: orientation is ±1 and radial segment k lies near angle 2π(k-1)/N
+    model = FC.build_celegans_model(joinpath(@__DIR__, "fixtures", "lattice.csv"))
+    z = LinRange(0, 1, length(model))
+    c = FC.FourierContour(model, z)
+    @test abs(c.orient) == 1
+    tss = FC.transverse_splines(model)
+    Ns = length(tss)
+    cs = FC.central_spline(model)
+    dcs = FC.Derivative(1) * cs
+    for i in (5, length(z) ÷ 2, length(z) - 5), k in 1:Ns
+        v = tss[k](z[i]) - cs(z[i])
+        θ = c.orient * FC._contour_angle(v, c.rights[i], c.tangents[i])
+        expected = 2π * (k - 1) / Ns
+        Δ = mod(θ - expected + π, 2π) - π
+        @test abs(Δ) < 0.3
+    end
+end
+
+@testset "FourierContour true_max_radius robustness and cache" begin
+    FC = ShroffCelegansModels
+    # deterministic pseudo-random radii, including high N and spiky profiles
+    for N in (4, 7, 16, 31, 32), seed in 1:6
+        radii = [5 + 3 * sin(k^2 * 1.7 + seed * 2.3) + 1.2 * cos(k * seed) for k in 1:N]
+        c = synthetic_contour(radii)
+        M = 20000
+        brute = maximum(FC._contour_eval(c, 1, 2π * j / M) for j in 0:M-1)
+        @test FC.true_max_radius(c, 1) ≈ brute rtol = 1e-6
+        @test FC.true_max_radius(c, 1) >= maximum(radii) - 1e-9
+    end
+
+    # cache: starts empty, filled only for queried index, stable on repeat
+    z = [0.0, 0.5, 1.0]
+    c = FC.FourierContour(fill(Point3(0.0, 0, 0), 3), fill(Point3(0.0, 0, 1), 3),
+        fill(Point3(1.0, 0, 0), 3), [5.0 6.0 7.0; 5.5 6.5 7.5; 5.0 6.0 7.0; 4.5 5.5 6.5])
+    @test all(isnan, c.max_cache)
+    v = FC.true_max_radius(c, 2)
+    @test isfinite(v) && isnan(c.max_cache[1]) && isnan(c.max_cache[3])
+    @test c.max_cache[2] == v
+    @test FC.true_max_radius(c, 2) === v
+end
+
+@testset "nearest_central_pt consistency across expansion factors" begin
+    FC = ShroffCelegansModels
+    model = FC.build_celegans_model(joinpath(@__DIR__, "fixtures", "lattice.csv"))
+    lat = vec(FC.lattice(model))
+    pts = vcat(lat, [p + Point3(30.0, 10.0, 0) for p in lat[1:3:end]], [Point3(1e4, 1e4, 1e4)])
+    efs = [1.0, 1.5, 2.0, 3.0]
+    ds = [last(FC.nearest_central_pt(model, pts, ef; fourier_contour = true)) for ef in efs]
+    for j in 1:length(efs)-1, k in eachindex(pts)
+        # a larger expansion factor admits a superset of candidates
+        @test ds[j+1][k] <= ds[j][k]
+    end
+    # far point finds nothing and does not throw
+    @test all(isinf, getindex.(ds, length(pts)))
+    # a sequence of factors yields the first factor with any finite candidate
+    _, _, dseq = FC.nearest_central_pt(model, pts, efs; fourier_contour = true)
+    for k in eachindex(pts)
+        j = findfirst(d -> isfinite(d[k]), ds)
+        @test dseq[k] == (j === nothing ? Inf : ds[j][k])
+    end
+end
+
+@testset "default path matches original algorithm" begin
+    FC = ShroffCelegansModels
+    model = FC.build_celegans_model(joinpath(@__DIR__, "fixtures", "lattice.csv"))
+    lat = vec(FC.lattice(model))
+    pts = vcat(lat, [p + Point3(30.0, 10.0, 0) for p in lat[1:3:end]])
+    efs = [1.0, 1.25, 1.5, 2.0, 3.0]
+    z = LinRange(0, 1, length(model))
+    central_pts = FC.central_spline(model).(z)
+    radius = FC.max_radius_function(model).(z)
+    # verbatim copy of the pre-change algorithm
+    function original(pt)
+        ud = norm.(central_pts .- pt)
+        a = 1
+        dist = copy(ud)
+        for ef in efs
+            dist[ud .> radius .* ef] .= Inf
+            a = argmin(dist)
+            dist[a] != Inf && break
+            dist = copy(ud)
+        end
+        z[a], central_pts[a], dist[a]
+    end
+    t, ncp, d = FC.nearest_central_pt(model, pts, efs)
+    for (k, pt) in enumerate(pts)
+        zo, co, do_ = original(pt)
+        @test t[k] == zo
+        @test ncp[k] == co
+        @test d[k] == do_
+    end
+    # untwist_annotations is unchanged by the keyword's presence
+    @test FC.untwist_annotations(model, pts) == FC.untwist_annotations(model, pts; fourier_contour = false)
+end
