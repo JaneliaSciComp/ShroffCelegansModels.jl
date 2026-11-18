@@ -7,11 +7,18 @@ Find the nearest central point on the model to each annotation point.
 - `model::AbstractCelegansModel`: The model to use for finding the nearest central point.
 - `pts::AbstractVector{<: Point}`: The annotation points to find the nearest central point.
 - `expansion_factor::Union{Vector{<: Real}, Real}=1.0`: The expansion factor to use for the distance check.
+- `fourier_contour::Union{Bool,FourierContour}=false`: If `true`, estimate the outer contour of the cross section at each
+  point's central angle by Fourier interpolation of the radial segments (see
+  [`FourierContour`](@ref)). Two-step bound for speed: points beyond the sampled maximum radius
+  are checked against the (lazily cached) interpolated maximum, and only points within it
+  are compared with the contour at their own angle. Pass a prebuilt
+  `FourierContour(model, LinRange(0, 1, length(model)))` to reuse it, and its cached
+  maxima, across repeated calls for the same model; it must come from that same model.
 
 # Returns
 - A tuple of three vectors: the spline parameter, the nearest central point, and the distance to the nearest central point.
 """
-function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0)
+function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0; fourier_contour = false)
     # Sample points along the central spline
     cs = ShroffCelegansModels.central_spline(model)
     Npts = length(model)
@@ -20,29 +27,65 @@ function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<:
 
     # For each sampled point calculate the maximum radius of the cross section
     max_r_func = ShroffCelegansModels.max_radius_function(model)
-    radius = max_r_func.(z)
+    max_radius = max_r_func.(z)
+    contour = if fourier_contour isa FourierContour
+        # Reuse a prebuilt contour (and its cached true maxima) across calls
+        length(fourier_contour.max_cache) == Npts ||
+            throw(ArgumentError("FourierContour has $(length(fourier_contour.max_cache)) cross sections but the model has $Npts"))
+        fourier_contour
+    elseif fourier_contour
+        FourierContour(model, z)
+    else
+        nothing
+    end
 
     # For each annotation point, find the nearest central point
     arg_pt_dist = map(pts) do pt
         # Distance between the annotation point and each sampled point along the central spline
         unbounded_dist = norm.(central_pts .- pt)
-        # bound check
         a = 1
-        dist = copy(unbounded_dist)
-        for ef in expansion_factor
-            # Set all distances larger than the radius times the expansion factor to infinity
-            dist[unbounded_dist .> radius .* ef] .= Inf
-            # Find the index of the central point with the smallest distance
-            a = argmin(dist)
-            if dist[a] != Inf
-                # If we found a point, then we are done with this point
-                break
-            end
-            # Otherwise, reset the distances and try with a larger expansion factor
+        if isnothing(contour)
             dist = copy(unbounded_dist)
+            for ef in expansion_factor
+                # Set all distances larger than the radius times the expansion factor to infinity
+                dist[unbounded_dist .> max_radius .* ef] .= Inf
+                # Find the index of the central point with the smallest distance
+                a = argmin(dist)
+                if dist[a] != Inf
+                    # If we found a point, then we are done with this point
+                    break
+                end
+                # Otherwise, reset the distances and try with a larger expansion factor
+                dist = copy(unbounded_dist)
+            end
+            z[a], central_pts[a], dist[a]
+        else
+            best_i, best_d = 1, Inf
+            for ef in expansion_factor
+                best_i, best_d = 1, Inf
+                for i in eachindex(z)
+                    d = unbounded_dist[i]
+                    # Cannot beat the best candidate so far
+                    d < best_d || continue
+                    # Step 1: beyond the maximum of the sampled radial segments?
+                    # Then the true (interpolated) maximum is needed, computed lazily and cached.
+                    if d > max_radius[i] * ef
+                        # Step 2: still outside the true maximum: no further evaluation
+                        d > true_max_radius(contour, i) * ef && continue
+                    end
+                    # Step 3: compare against the contour in the direction of the point
+                    d <= contour_radius(contour, i, pt) * ef || continue
+                    best_i, best_d = i, d
+                end
+                isfinite(best_d) && break
+            end
+            # Nothing within any bound: fall back to the unbounded nearest point like the original
+            if !isfinite(best_d)
+                best_i = argmin(unbounded_dist)
+                best_d = Inf
+            end
+            z[best_i], central_pts[best_i], best_d
         end
-        # Return a tuple of the spline parameter, the nearest central point, and the distance to the nearest central point
-        z[a], central_pts[a], dist[a]
     end
     second = x->x[2]
     # Split each tuple into three vectors
@@ -72,6 +115,119 @@ function get_central_point_parameters(
     central_pts = central_pts[indices]
     pt_to_central_dist = norm.(central_pts .- pts)
     return spline_param, central_pts, pt_to_central_dist
+end
+
+"""
+    FourierContour(model::AbstractCelegansModel, z)
+
+Fourier-interpolated estimate of the outer contour of the worm at the spline
+parameters `z`. At each `z` the lengths of the radial segments (transverse
+splines) are treated as uniformly spaced samples of a periodic function of the
+central angle. The angle of a point is measured from the first transverse
+spline about the central spline tangent, the same convention used by
+[`untwist_annotations`](@ref).
+
+Use [`contour_radius`](@ref) for the radius in the direction of a point and
+[`true_max_radius`](@ref) for the interpolated maximum, which is computed
+lazily and cached per `z` index.
+"""
+struct FourierContour
+    central_pts::Vector{Point3d}
+    tangents::Vector{Point3d}
+    rights::Vector{Point3d}
+    coeffs::Matrix{ComplexF64}   # Fourier coefficients, N x length(z)
+    freqs::Vector{Int}
+    orient::Float64
+    max_cache::Vector{Float64}   # NaN until computed
+end
+
+_contour_angle(v, r, t) = atan(t ⋅ (r × v), r ⋅ v)
+
+function FourierContour(model::AbstractCelegansModel, z)
+    cs = central_spline(model)
+    dcs = Derivative(1) * cs
+    tss = transverse_splines(model)
+    N = length(tss)
+    central_pts = Point3d.(cs.(z))
+    tangents = [Point3d(normalize(dcs(zi))) for zi in z]
+    rights = [Point3d(normalize(tss[1](zi) - c)) for (zi, c) in zip(z, central_pts)]
+    radii = [norm(tss[k](zi) - c) for k in 1:N, (zi, c) in zip(z, central_pts)]
+    # Orientation of increasing spline index relative to the angle convention
+    zmid = length(z) ÷ 2 + 1
+    v2 = N > 1 ? tss[2](z[zmid]) - central_pts[zmid] : rights[zmid]
+    o = sign(_contour_angle(v2, rights[zmid], tangents[zmid]))
+    orient = o == 0 ? 1.0 : Float64(o)
+    return FourierContour(central_pts, tangents, rights, radii, orient)
+end
+
+"""
+    FourierContour(central_pts, tangents, rights, radii::AbstractMatrix, orient=1.0)
+
+Construct directly from per-cross-section geometry: `radii` is `N x length(central_pts)`
+with the radial segment lengths of each cross section.
+"""
+function FourierContour(central_pts, tangents, rights, radii::AbstractMatrix, orient = 1.0)
+    N = size(radii, 1)
+    freqs = [m <= N ÷ 2 ? m : m - N for m in 0:N-1]
+    # For even N the Nyquist coefficient is real and appears once, so taking
+    # the real part below keeps the series real and exact at the samples.
+    return FourierContour(Vector{Point3d}(central_pts), Vector{Point3d}(tangents),
+        Vector{Point3d}(rights), fft(radii, 1) ./ N, freqs, Float64(orient),
+        fill(NaN, size(radii, 2)))
+end
+
+@inline function _contour_eval(c::FourierContour, i::Int, θ::Real)
+    acc = 0.0
+    @inbounds for j in eachindex(c.freqs)
+        acc += real(c.coeffs[j, i] * cis(c.freqs[j] * θ))
+    end
+    return acc
+end
+
+"""
+    contour_radius(c::FourierContour, i::Integer, pt) -> Float64
+
+Interpolated contour radius at `z` index `i` in the direction of `pt`.
+"""
+function contour_radius(c::FourierContour, i::Integer, pt)
+    θ = c.orient * _contour_angle(pt - c.central_pts[i], c.rights[i], c.tangents[i])
+    return _contour_eval(c, i, θ)
+end
+
+"""
+    true_max_radius(c::FourierContour, i::Integer) -> Float64
+
+Maximum of the interpolated contour over all central angles at `z` index `i`,
+found by dense sampling and local refinement. Cached after the first call.
+"""
+function true_max_radius(c::FourierContour, i::Integer)
+    v = c.max_cache[i]
+    isnan(v) || return v
+    N = length(c.freqs)
+    M = 16 * N
+    step = 2π / M
+    best_θ, best = 0.0, -Inf
+    for k in 0:M-1
+        r = _contour_eval(c, i, k * step)
+        if r > best
+            best, best_θ = r, k * step
+        end
+    end
+    # Golden-section refinement within one grid step of the best sample
+    lo, hi = best_θ - step, best_θ + step
+    φ = (sqrt(5) - 1) / 2
+    for _ in 1:30
+        x1 = hi - φ * (hi - lo)
+        x2 = lo + φ * (hi - lo)
+        if _contour_eval(c, i, x1) > _contour_eval(c, i, x2)
+            hi = x2
+        else
+            lo = x1
+        end
+    end
+    best = max(best, _contour_eval(c, i, (lo + hi) / 2))
+    c.max_cache[i] = best
+    return best
 end
 
 function max_radius_function(model)
@@ -126,6 +282,9 @@ Untwist the annotations by computing their position relative to the central spli
 
 - `model::AbstractCelegansModel`: The model to use for untwisting.
 - `pts::AbstractVector{<: Point}`: The annotation points to untwist.
+- `fourier_contour::Union{Bool,FourierContour}=false`: Use Fourier interpolation of the radial segments over the
+  central angle to estimate the outer contour that bounds the anterior-posterior assignment,
+  instead of the maximum radial segment length.
 
 # Returns
 - `Vector{Point3}`: The untwisted annotation points.
@@ -158,7 +317,8 @@ ShroffCelegansModels.untwist_annotations(model, pts)
 function untwist_annotations(
     model::AbstractCelegansModel,
     pts::AbstractVector{<: Point},
-    central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing
+    central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing;
+    fourier_contour = false
 )::Vector{Point3d}
     thresholds = [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.5, 2.0, 2.5]
 
@@ -167,7 +327,7 @@ function untwist_annotations(
     # ncp is the nearest central point
     # pts_norm is the distance from the point to the central spline
     if isnothing(central_spline_voxel_distances)
-        t, ncp, pts_norm = nearest_central_pt(model, pts, thresholds)
+        t, ncp, pts_norm = nearest_central_pt(model, pts, thresholds; fourier_contour)
     else
         t, ncp, pts_norm = get_central_point_parameters(model, pts, central_spline_voxel_distances)
     end
@@ -219,14 +379,15 @@ end
 function untwist_annotation(
     model::AbstractCelegansModel,
     pt::Point,
-    central_spline_voxel_distance::Union{Real,Nothing} = nothing # "z"
+    central_spline_voxel_distance::Union{Real,Nothing} = nothing; # "z"
+    fourier_contour = false
 )
     pts = [pt]
     central_spline_voxel_distances =
         isnothing(central_spline_voxel_distance) ?
             nothing :
             [central_spline_voxel_distance]
-    return only(untwist_annotations(model, pts, central_spline_voxel_distances))
+    return only(untwist_annotations(model, pts, central_spline_voxel_distances; fourier_contour))
 end
 
 """

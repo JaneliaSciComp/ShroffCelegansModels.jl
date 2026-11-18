@@ -7,4 +7,5 @@ using Test
     include("avg_models.jl")
     include("transform_annotations.jl")
     include("flat_prime.jl")
+    include("fourier_contour.jl")
 end
