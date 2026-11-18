@@ -126,7 +126,6 @@ struct FourierContour
     rights::Vector{Point3d}
     coeffs::Matrix{ComplexF64}   # Fourier coefficients, N x length(z)
     freqs::Vector{Int}
-    weights::Vector{Float64}
     orient::Float64
     max_cache::Vector{Float64}   # NaN until computed
 end
@@ -147,17 +146,29 @@ function FourierContour(model::AbstractCelegansModel, z)
     v2 = N > 1 ? tss[2](z[zmid]) - central_pts[zmid] : rights[zmid]
     o = sign(_contour_angle(v2, rights[zmid], tangents[zmid]))
     orient = o == 0 ? 1.0 : Float64(o)
+    return FourierContour(central_pts, tangents, rights, radii, orient)
+end
+
+"""
+    FourierContour(central_pts, tangents, rights, radii::AbstractMatrix, orient=1.0)
+
+Construct directly from per-cross-section geometry: `radii` is `N x length(central_pts)`
+with the radial segment lengths of each cross section.
+"""
+function FourierContour(central_pts, tangents, rights, radii::AbstractMatrix, orient = 1.0)
+    N = size(radii, 1)
     freqs = [m <= N ÷ 2 ? m : m - N for m in 0:N-1]
-    # Split the Nyquist term for even N so the series stays real
-    weights = [(iseven(N) && abs(m) == N ÷ 2) ? 0.5 : 1.0 for m in freqs]
-    return FourierContour(central_pts, tangents, rights, fft(radii, 1) ./ N,
-        freqs, weights, orient, fill(NaN, length(z)))
+    # For even N the Nyquist coefficient is real and appears once, so taking
+    # the real part below keeps the series real and exact at the samples.
+    return FourierContour(Vector{Point3d}(central_pts), Vector{Point3d}(tangents),
+        Vector{Point3d}(rights), fft(radii, 1) ./ N, freqs, Float64(orient),
+        fill(NaN, size(radii, 2)))
 end
 
 @inline function _contour_eval(c::FourierContour, i::Int, θ::Real)
     acc = 0.0
     @inbounds for j in eachindex(c.freqs)
-        acc += c.weights[j] * real(c.coeffs[j, i] * cis(c.freqs[j] * θ))
+        acc += real(c.coeffs[j, i] * cis(c.freqs[j] * θ))
     end
     return acc
 end
