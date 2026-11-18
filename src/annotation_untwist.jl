@@ -7,16 +7,18 @@ Find the nearest central point on the model to each annotation point.
 - `model::AbstractCelegansModel`: The model to use for finding the nearest central point.
 - `pts::AbstractVector{<: Point}`: The annotation points to find the nearest central point.
 - `expansion_factor::Union{Vector{<: Real}, Real}=1.0`: The expansion factor to use for the distance check.
-- `fourier_contour::Bool=false`: If `true`, estimate the outer contour of the cross section at each
+- `fourier_contour::Union{Bool,FourierContour}=false`: If `true`, estimate the outer contour of the cross section at each
   point's central angle by Fourier interpolation of the radial segments (see
   [`FourierContour`](@ref)). Two-step bound for speed: points beyond the sampled maximum radius
   are checked against the (lazily cached) interpolated maximum, and only points within it
-  are compared with the contour at their own angle.
+  are compared with the contour at their own angle. Pass a prebuilt
+  `FourierContour(model, LinRange(0, 1, length(model)))` to reuse it, and its cached
+  maxima, across repeated calls for the same model; it must come from that same model.
 
 # Returns
 - A tuple of three vectors: the spline parameter, the nearest central point, and the distance to the nearest central point.
 """
-function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0; fourier_contour::Bool = false)
+function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<: Point}, expansion_factor = 1.0; fourier_contour = false)
     # Sample points along the central spline
     cs = ShroffCelegansModels.central_spline(model)
     Npts = length(model)
@@ -26,7 +28,16 @@ function nearest_central_pt(model::AbstractCelegansModel, pts::AbstractVector{<:
     # For each sampled point calculate the maximum radius of the cross section
     max_r_func = ShroffCelegansModels.max_radius_function(model)
     max_radius = max_r_func.(z)
-    contour = fourier_contour ? FourierContour(model, z) : nothing
+    contour = if fourier_contour isa FourierContour
+        # Reuse a prebuilt contour (and its cached true maxima) across calls
+        length(fourier_contour.max_cache) == Npts ||
+            throw(ArgumentError("FourierContour has $(length(fourier_contour.max_cache)) cross sections but the model has $Npts"))
+        fourier_contour
+    elseif fourier_contour
+        FourierContour(model, z)
+    else
+        nothing
+    end
 
     # For each annotation point, find the nearest central point
     arg_pt_dist = map(pts) do pt
@@ -271,7 +282,7 @@ Untwist the annotations by computing their position relative to the central spli
 
 - `model::AbstractCelegansModel`: The model to use for untwisting.
 - `pts::AbstractVector{<: Point}`: The annotation points to untwist.
-- `fourier_contour::Bool=false`: Use Fourier interpolation of the radial segments over the
+- `fourier_contour::Union{Bool,FourierContour}=false`: Use Fourier interpolation of the radial segments over the
   central angle to estimate the outer contour that bounds the anterior-posterior assignment,
   instead of the maximum radial segment length.
 
@@ -307,7 +318,7 @@ function untwist_annotations(
     model::AbstractCelegansModel,
     pts::AbstractVector{<: Point},
     central_spline_voxel_distances::Union{AbstractVector{<: Real},Nothing} = nothing;
-    fourier_contour::Bool = false
+    fourier_contour = false
 )::Vector{Point3d}
     thresholds = [1.0, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.5, 2.0, 2.5]
 
@@ -368,14 +379,15 @@ end
 function untwist_annotation(
     model::AbstractCelegansModel,
     pt::Point,
-    central_spline_voxel_distance::Union{Real,Nothing} = nothing # "z"
+    central_spline_voxel_distance::Union{Real,Nothing} = nothing; # "z"
+    fourier_contour = false
 )
     pts = [pt]
     central_spline_voxel_distances =
         isnothing(central_spline_voxel_distance) ?
             nothing :
             [central_spline_voxel_distance]
-    return only(untwist_annotations(model, pts, central_spline_voxel_distances))
+    return only(untwist_annotations(model, pts, central_spline_voxel_distances; fourier_contour))
 end
 
 """

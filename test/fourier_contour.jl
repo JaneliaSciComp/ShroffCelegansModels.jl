@@ -223,3 +223,32 @@ end
     # untwist_annotations is unchanged by the keyword's presence
     @test FC.untwist_annotations(model, pts) == FC.untwist_annotations(model, pts; fourier_contour = false)
 end
+
+@testset "prebuilt FourierContour reuse" begin
+    FC = ShroffCelegansModels
+    model = FC.build_celegans_model(joinpath(@__DIR__, "fixtures", "lattice.csv"))
+    lat = vec(FC.lattice(model))
+    pts = vcat(lat, [p + Point3(30.0, 10.0, 0) for p in lat[1:3:end]])
+    efs = [1.0, 1.5, 2.0, 3.0]
+    z = LinRange(0, 1, length(model))
+    c = FC.FourierContour(model, z)
+    fresh = FC.nearest_central_pt(model, pts, efs; fourier_contour = true)
+    reused = FC.nearest_central_pt(model, pts, efs; fourier_contour = c)
+    @test fresh == reused
+    # cache is populated by the first use and reused by later calls
+    @test any(!isnan, c.max_cache)
+    snapshot = copy(c.max_cache)
+    again = FC.nearest_central_pt(model, pts[1:5], efs; fourier_contour = c)
+    # previously cached maxima are retained unchanged
+    @test all(c.max_cache[i] == snapshot[i] for i in eachindex(snapshot) if !isnan(snapshot[i]))
+    @test again == FC.nearest_central_pt(model, pts[1:5], efs; fourier_contour = true)
+    # untwist paths accept it too
+    @test FC.untwist_annotations(model, pts; fourier_contour = c) ==
+          FC.untwist_annotations(model, pts; fourier_contour = true)
+    @test FC.untwist_annotation(model, pts[1]; fourier_contour = c) ==
+          FC.untwist_annotation(model, pts[1]; fourier_contour = true)
+    # mismatched contour is rejected
+    bad = FC.FourierContour(fill(Point3(0.0, 0, 0), 3), fill(Point3(0.0, 0, 1), 3),
+        fill(Point3(1.0, 0, 0), 3), fill(5.0, 8, 3))
+    @test_throws ArgumentError FC.nearest_central_pt(model, pts, efs; fourier_contour = bad)
+end
